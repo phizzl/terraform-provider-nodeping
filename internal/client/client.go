@@ -17,24 +17,24 @@ import (
 )
 
 const (
-	DefaultBaseURL     = "https://api.nodeping.com/api/1"
-	DefaultRateLimit   = 10
-	DefaultMaxRetries  = 3
+	DefaultBaseURL      = "https://api.nodeping.com/api/1"
+	DefaultRateLimit    = 10
+	DefaultMaxRetries   = 3
 	DefaultRetryMinWait = 1 * time.Second
 	DefaultRetryMaxWait = 30 * time.Second
-	DefaultTimeout     = 30 * time.Second
+	DefaultTimeout      = 30 * time.Second
 )
 
 type Client struct {
-	httpClient  *http.Client
-	baseURL     string
-	apiToken    string
-	customerID  string
-	rateLimiter *rate.Limiter
-	maxRetries  int
+	httpClient   *http.Client
+	baseURL      string
+	apiToken     string
+	customerID   string
+	rateLimiter  *rate.Limiter
+	maxRetries   int
 	retryMinWait time.Duration
 	retryMaxWait time.Duration
-	userAgent   string
+	userAgent    string
 }
 
 type ClientConfig struct {
@@ -102,11 +102,11 @@ func (c *Client) WithCustomerID(customerID string) *Client {
 }
 
 type requestOptions struct {
-	method      string
-	path        string
-	query       url.Values
-	body        interface{}
-	customerID  string
+	method     string
+	path       string
+	query      url.Values
+	body       interface{}
+	customerID string
 }
 
 func (c *Client) doRequest(ctx context.Context, opts requestOptions, result interface{}) error {
@@ -161,9 +161,6 @@ func (c *Client) executeRequest(ctx context.Context, opts requestOptions, result
 	if customerID != "" {
 		opts.query.Set("customerid", customerID)
 	}
-
-	// Debug: Log the full request URL
-	fmt.Printf("[DEBUG] NodePing API Request: %s %s (customerid=%s)\n", opts.method, c.baseURL+opts.path, customerID)
 
 	reqURL.RawQuery = opts.query.Encode()
 

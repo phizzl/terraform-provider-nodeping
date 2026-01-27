@@ -20,21 +20,21 @@ type CheckDataSource struct {
 }
 
 type CheckDataSourceModel struct {
-	ID           types.String  `tfsdk:"id"`
-	CustomerID   types.String  `tfsdk:"customer_id"`
-	Type         types.String  `tfsdk:"type"`
-	Target       types.String  `tfsdk:"target"`
-	Label        types.String  `tfsdk:"label"`
-	Enabled      types.Bool    `tfsdk:"enabled"`
-	Public       types.Bool    `tfsdk:"public"`
-	Interval     types.Float64 `tfsdk:"interval"`
-	Threshold    types.Int64   `tfsdk:"threshold"`
-	Sens         types.Int64   `tfsdk:"sens"`
-	State        types.Int64   `tfsdk:"state"`
-	Created      types.Int64   `tfsdk:"created"`
-	Modified     types.Int64   `tfsdk:"modified"`
-	Description  types.String  `tfsdk:"description"`
-	Tags         types.List    `tfsdk:"tags"`
+	ID          types.String  `tfsdk:"id"`
+	CustomerID  types.String  `tfsdk:"customer_id"`
+	Type        types.String  `tfsdk:"type"`
+	Target      types.String  `tfsdk:"target"`
+	Label       types.String  `tfsdk:"label"`
+	Enabled     types.Bool    `tfsdk:"enabled"`
+	Public      types.Bool    `tfsdk:"public"`
+	Interval    types.Float64 `tfsdk:"interval"`
+	Threshold   types.Int64   `tfsdk:"threshold"`
+	Sens        types.Int64   `tfsdk:"sens"`
+	State       types.Int64   `tfsdk:"state"`
+	Created     types.Int64   `tfsdk:"created"`
+	Modified    types.Int64   `tfsdk:"modified"`
+	Description types.String  `tfsdk:"description"`
+	Tags        types.List    `tfsdk:"tags"`
 }
 
 func NewCheckDataSource() datasource.DataSource {

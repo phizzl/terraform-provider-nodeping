@@ -205,11 +205,11 @@ func TestDoRequestNoRetryOn400(t *testing.T) {
 
 func TestAPIErrorMethods(t *testing.T) {
 	tests := []struct {
-		name         string
-		err          *APIError
-		isNotFound   bool
-		isUnauth     bool
-		isRetryable  bool
+		name        string
+		err         *APIError
+		isNotFound  bool
+		isUnauth    bool
+		isRetryable bool
 	}{
 		{
 			name:        "404 Not Found",
