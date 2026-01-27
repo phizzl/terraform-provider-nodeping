@@ -120,10 +120,9 @@ sbom:
   stage: build
   image: golang:${GO_VERSION}
   extends: .go-cache
-  before_script:
-    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
   script:
-    - cyclonedx-gomod mod -json -output sbom.json
+    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+    - $(go env GOPATH)/bin/cyclonedx-gomod mod -json -output sbom.json
   artifacts:
     paths:
       - sbom.json
