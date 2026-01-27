@@ -78,7 +78,15 @@ func (r *CheckResource) Create(ctx context.Context, req resource.CreateRequest, 
 		return
 	}
 
+	// Preserve the original target from plan if API normalized it (e.g., added trailing slash)
+	originalTarget := plan.Target
+
 	r.mapCheckToModel(ctx, check, &plan)
+
+	// Restore original target if it's semantically equivalent (trailing slash difference)
+	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
+		plan.Target = originalTarget
+	}
 
 	tflog.Debug(ctx, "Created check", map[string]interface{}{
 		"id": check.ID,
@@ -114,7 +122,15 @@ func (r *CheckResource) Read(ctx context.Context, req resource.ReadRequest, resp
 		return
 	}
 
+	// Preserve the original target from state if API normalized it
+	originalTarget := state.Target
+
 	r.mapCheckToModel(ctx, check, &state)
+
+	// Restore original target if it's semantically equivalent (trailing slash difference)
+	if normalizeURL(originalTarget.ValueString()) == normalizeURL(state.Target.ValueString()) {
+		state.Target = originalTarget
+	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
@@ -149,7 +165,15 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		return
 	}
 
+	// Preserve the original target from plan if API normalized it
+	originalTarget := plan.Target
+
 	r.mapCheckToModel(ctx, check, &plan)
+
+	// Restore original target if it's semantically equivalent (trailing slash difference)
+	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
+		plan.Target = originalTarget
+	}
 
 	tflog.Debug(ctx, "Updated check", map[string]interface{}{
 		"id": check.ID,
@@ -580,4 +604,8 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 	} else {
 		model.Notifications = nil
 	}
+}
+
+func normalizeURL(u string) string {
+	return strings.TrimSuffix(u, "/")
 }

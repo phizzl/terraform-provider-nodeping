@@ -162,6 +162,9 @@ func (c *Client) executeRequest(ctx context.Context, opts requestOptions, result
 		opts.query.Set("customerid", customerID)
 	}
 
+	// Debug: Log the full request URL
+	fmt.Printf("[DEBUG] NodePing API Request: %s %s (customerid=%s)\n", opts.method, c.baseURL+opts.path, customerID)
+
 	reqURL.RawQuery = opts.query.Encode()
 
 	var bodyReader io.Reader
