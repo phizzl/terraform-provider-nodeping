@@ -1,8 +1,9 @@
 #!/bin/bash
 set -e
 
-VERSION="${1:-0.1.0}"
+VERSION="${1:-0.2.0}"
 GITLAB_URL="${GITLAB_URL:-https://gitlab.nxs360.com}"
+GITLAB_API_URL="${GITLAB_API_URL:-${GITLAB_URL}/api/v4}"
 PROJECT_ID="${PROJECT_ID:-1425}"
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -35,7 +36,7 @@ else
 fi
 
 curl -fsSL --header "$AUTH_HEADER" \
-  "${GITLAB_URL}/api/v4/projects/${PROJECT_ID}/packages/generic/terraform-provider-nodeping/${VERSION}/${BINARY_NAME}" \
+  "${GITLAB_API_URL}/projects/${PROJECT_ID}/packages/generic/terraform-provider-nodeping/${VERSION}/${BINARY_NAME}" \
   -o "${INSTALL_DIR}/terraform-provider-nodeping"
 
 chmod +x "${INSTALL_DIR}/terraform-provider-nodeping"
