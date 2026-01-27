@@ -1,0 +1,231 @@
+package client
+
+import (
+	"encoding/json"
+)
+
+type Contact struct {
+	ID         string                    `json:"_id,omitempty"`
+	Type       string                    `json:"type,omitempty"`
+	CustomerID string                    `json:"customer_id,omitempty"`
+	Name       string                    `json:"name,omitempty"`
+	CustRole   string                    `json:"custrole,omitempty"`
+	Addresses  map[string]ContactAddress `json:"addresses,omitempty"`
+}
+
+type ContactAddress struct {
+	Address       string          `json:"address,omitempty"`
+	Type          string          `json:"type,omitempty"`
+	Status        string          `json:"status,omitempty"`
+	SuppressUp    bool            `json:"suppressup,omitempty"`
+	SuppressDown  bool            `json:"suppressdown,omitempty"`
+	SuppressFirst bool            `json:"suppressfirst,omitempty"`
+	SuppressDiag  bool            `json:"suppressdiag,omitempty"`
+	SuppressAll   bool            `json:"suppressall,omitempty"`
+	Mute          json.RawMessage `json:"mute,omitempty"`
+	Action        string          `json:"action,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	QueryStrings  map[string]string `json:"querystrings,omitempty"`
+	Data          string          `json:"data,omitempty"`
+	Priority      *int            `json:"priority,omitempty"`
+}
+
+type NewAddress struct {
+	Address       string            `json:"address"`
+	Type          string            `json:"type"`
+	SuppressUp    bool              `json:"suppressup,omitempty"`
+	SuppressDown  bool              `json:"suppressdown,omitempty"`
+	SuppressFirst bool              `json:"suppressfirst,omitempty"`
+	SuppressDiag  bool              `json:"suppressdiag,omitempty"`
+	SuppressAll   bool              `json:"suppressall,omitempty"`
+	Mute          interface{}       `json:"mute,omitempty"`
+	Action        string            `json:"action,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	QueryStrings  map[string]string `json:"querystrings,omitempty"`
+	Data          string            `json:"data,omitempty"`
+	Priority      *int              `json:"priority,omitempty"`
+}
+
+type ContactCreateRequest struct {
+	Name         string       `json:"name,omitempty"`
+	CustRole     string       `json:"custrole,omitempty"`
+	NewAddresses []NewAddress `json:"newaddresses,omitempty"`
+}
+
+type ContactUpdateRequest struct {
+	Name         string                    `json:"name,omitempty"`
+	CustRole     string                    `json:"custrole,omitempty"`
+	Addresses    map[string]ContactAddress `json:"addresses,omitempty"`
+	NewAddresses []NewAddress              `json:"newaddresses,omitempty"`
+}
+
+type Check struct {
+	ID            string                 `json:"_id,omitempty"`
+	Rev           string                 `json:"_rev,omitempty"`
+	CustomerID    string                 `json:"customer_id,omitempty"`
+	Label         string                 `json:"label,omitempty"`
+	Type          string                 `json:"type,omitempty"`
+	Interval      json.Number            `json:"interval,omitempty"`
+	Enabled       string                 `json:"enable,omitempty"`
+	Public        bool                   `json:"public,omitempty"`
+	Status        string                 `json:"status,omitempty"`
+	Modified      int64                  `json:"modified,omitempty"`
+	Created       int64                  `json:"created,omitempty"`
+	State         int                    `json:"state,omitempty"`
+	FirstDown     interface{}            `json:"firstdown,omitempty"`
+	Notifications []map[string]interface{} `json:"notifications,omitempty"`
+	Parameters    CheckParameters        `json:"parameters,omitempty"`
+	Dep           interface{}            `json:"dep,omitempty"`
+	Mute          interface{}            `json:"mute,omitempty"`
+	Description   string                 `json:"description,omitempty"`
+	Queue         string                 `json:"queue,omitempty"`
+	UUID          string                 `json:"uuid,omitempty"`
+	RunLocations  interface{}            `json:"runlocations,omitempty"`
+	HomeLoc       interface{}            `json:"homeloc,omitempty"`
+	AutoDiag      bool                   `json:"autodiag,omitempty"`
+	Tags          []string               `json:"tags,omitempty"`
+}
+
+type CheckParameters struct {
+	Target        string                 `json:"target,omitempty"`
+	Threshold     interface{}            `json:"threshold,omitempty"`
+	Sens          interface{}            `json:"sens,omitempty"`
+	ContentString string                 `json:"contentstring,omitempty"`
+	Regex         interface{}            `json:"regex,omitempty"`
+	Invert        interface{}            `json:"invert,omitempty"`
+	Follow        interface{}            `json:"follow,omitempty"`
+	Method        string                 `json:"method,omitempty"`
+	StatusCode    interface{}            `json:"statuscode,omitempty"`
+	SendHeaders   map[string]string      `json:"sendheaders,omitempty"`
+	ReceiveHeaders map[string]string     `json:"receiveheaders,omitempty"`
+	Data          interface{}            `json:"data,omitempty"`
+	PostData      string                 `json:"postdata,omitempty"`
+	Port          interface{}            `json:"port,omitempty"`
+	Username      string                 `json:"username,omitempty"`
+	Password      string                 `json:"password,omitempty"`
+	Secure        interface{}            `json:"secure,omitempty"`
+	Verify        interface{}            `json:"verify,omitempty"`
+	IPv6          interface{}            `json:"ipv6,omitempty"`
+	DNSType       string                 `json:"dnstype,omitempty"`
+	DNSToResolve  string                 `json:"dnstoresolve,omitempty"`
+	DNSSection    string                 `json:"dnssection,omitempty"`
+	DNSRD         interface{}            `json:"dnsrd,omitempty"`
+	Transport     string                 `json:"transport,omitempty"`
+	WarningDays   interface{}            `json:"warningdays,omitempty"`
+	ServerName    string                 `json:"servername,omitempty"`
+	Email         string                 `json:"email,omitempty"`
+	Database      string                 `json:"database,omitempty"`
+	Query         string                 `json:"query,omitempty"`
+	Namespace     string                 `json:"namespace,omitempty"`
+	Fields        map[string]CheckField  `json:"fields,omitempty"`
+	Hosts         map[string]RedisHost   `json:"hosts,omitempty"`
+	RedisType     string                 `json:"redistype,omitempty"`
+	SentinelName  string                 `json:"sentinelname,omitempty"`
+	SSHKey        string                 `json:"sshkey,omitempty"`
+	ClientCert    string                 `json:"clientcert,omitempty"`
+	CheckToken    string                 `json:"checktoken,omitempty"`
+	OldResultFail interface{}            `json:"oldresultfail,omitempty"`
+	Ignore        string                 `json:"ignore,omitempty"`
+	DoHDoT        string                 `json:"dohdot,omitempty"`
+	EDNS          map[string]string      `json:"edns,omitempty"`
+	WhoisServer   string                 `json:"whoisserver,omitempty"`
+	RDAPUrl       string                 `json:"rdapurl,omitempty"`
+	SNMPv         string                 `json:"snmpv,omitempty"`
+	SNMPCom       string                 `json:"snmpcom,omitempty"`
+	VerifyVolume  interface{}            `json:"verifyvolume,omitempty"`
+	VolumeMin     interface{}            `json:"volumemin,omitempty"`
+}
+
+type CheckField struct {
+	Name  string      `json:"name,omitempty"`
+	Min   interface{} `json:"min,omitempty"`
+	Max   interface{} `json:"max,omitempty"`
+	Match string      `json:"match,omitempty"`
+}
+
+type RedisHost struct {
+	Host     string `json:"host"`
+	Port     int    `json:"port,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
+type CheckCreateRequest struct {
+	Type          string                   `json:"type"`
+	Target        string                   `json:"target,omitempty"`
+	Label         string                   `json:"label,omitempty"`
+	Interval      interface{}              `json:"interval,omitempty"`
+	Enabled       string                   `json:"enabled,omitempty"`
+	Public        interface{}              `json:"public,omitempty"`
+	AutoDiag      interface{}              `json:"autodiag,omitempty"`
+	RunLocations  interface{}              `json:"runlocations,omitempty"`
+	HomeLoc       interface{}              `json:"homeloc,omitempty"`
+	Threshold     interface{}              `json:"threshold,omitempty"`
+	Sens          interface{}              `json:"sens,omitempty"`
+	Notifications []map[string]interface{} `json:"notifications,omitempty"`
+	Dep           interface{}              `json:"dep,omitempty"`
+	Mute          interface{}              `json:"mute,omitempty"`
+	Description   string                   `json:"description,omitempty"`
+	Tags          []string                 `json:"tags,omitempty"`
+	ContentString string                   `json:"contentstring,omitempty"`
+	Regex         interface{}              `json:"regex,omitempty"`
+	Invert        interface{}              `json:"invert,omitempty"`
+	Follow        interface{}              `json:"follow,omitempty"`
+	Method        string                   `json:"method,omitempty"`
+	StatusCode    interface{}              `json:"statuscode,omitempty"`
+	SendHeaders   map[string]string        `json:"sendheaders,omitempty"`
+	ReceiveHeaders map[string]string       `json:"receiveheaders,omitempty"`
+	Data          interface{}              `json:"data,omitempty"`
+	PostData      string                   `json:"postdata,omitempty"`
+	Port          interface{}              `json:"port,omitempty"`
+	Username      string                   `json:"username,omitempty"`
+	Password      string                   `json:"password,omitempty"`
+	Secure        interface{}              `json:"secure,omitempty"`
+	Verify        interface{}              `json:"verify,omitempty"`
+	IPv6          interface{}              `json:"ipv6,omitempty"`
+	DNSType       string                   `json:"dnstype,omitempty"`
+	DNSToResolve  string                   `json:"dnstoresolve,omitempty"`
+	DNSSection    string                   `json:"dnssection,omitempty"`
+	DNSRD         interface{}              `json:"dnsrd,omitempty"`
+	Transport     string                   `json:"transport,omitempty"`
+	WarningDays   interface{}              `json:"warningdays,omitempty"`
+	ServerName    string                   `json:"servername,omitempty"`
+	Email         string                   `json:"email,omitempty"`
+	Database      string                   `json:"database,omitempty"`
+	Query         string                   `json:"query,omitempty"`
+	Namespace     string                   `json:"namespace,omitempty"`
+	Fields        map[string]CheckField    `json:"fields,omitempty"`
+	Hosts         map[string]RedisHost     `json:"hosts,omitempty"`
+	RedisType     string                   `json:"redistype,omitempty"`
+	SentinelName  string                   `json:"sentinelname,omitempty"`
+	SSHKey        string                   `json:"sshkey,omitempty"`
+	ClientCert    string                   `json:"clientcert,omitempty"`
+	CheckToken    string                   `json:"checktoken,omitempty"`
+	OldResultFail interface{}              `json:"oldresultfail,omitempty"`
+	Ignore        string                   `json:"ignore,omitempty"`
+	DoHDoT        string                   `json:"dohdot,omitempty"`
+	EDNS          map[string]string        `json:"edns,omitempty"`
+	WhoisServer   string                   `json:"whoisserver,omitempty"`
+	RDAPUrl       string                   `json:"rdapurl,omitempty"`
+	SNMPv         string                   `json:"snmpv,omitempty"`
+	SNMPCom       string                   `json:"snmpcom,omitempty"`
+	VerifyVolume  interface{}              `json:"verifyvolume,omitempty"`
+	VolumeMin     interface{}              `json:"volumemin,omitempty"`
+}
+
+type CheckUpdateRequest struct {
+	CheckCreateRequest
+}
+
+type Notification struct {
+	Delay    int    `json:"delay"`
+	Schedule string `json:"schedule"`
+}
+
+type DeleteResponse struct {
+	OK bool   `json:"ok"`
+	ID string `json:"id"`
+}
+
+type ErrorResponse struct {
+	Error string `json:"error"`
+}

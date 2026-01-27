@@ -1,0 +1,189 @@
+package checks
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/hashicorp/terraform-plugin-framework/datasource"
+	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
+
+	"github.com/nodeping/terraform-provider-nodeping/internal/client"
+)
+
+var _ datasource.DataSource = &ChecksDataSource{}
+var _ datasource.DataSourceWithConfigure = &ChecksDataSource{}
+
+type ChecksDataSource struct {
+	client *client.Client
+}
+
+type ChecksDataSourceModel struct {
+	Type   types.String `tfsdk:"type"`
+	Checks []CheckModel `tfsdk:"checks"`
+}
+
+type CheckModel struct {
+	ID         types.String  `tfsdk:"id"`
+	CustomerID types.String  `tfsdk:"customer_id"`
+	Type       types.String  `tfsdk:"type"`
+	Target     types.String  `tfsdk:"target"`
+	Label      types.String  `tfsdk:"label"`
+	Enabled    types.Bool    `tfsdk:"enabled"`
+	Interval   types.Float64 `tfsdk:"interval"`
+	State      types.Int64   `tfsdk:"state"`
+	Tags       types.List    `tfsdk:"tags"`
+}
+
+func NewChecksDataSource() datasource.DataSource {
+	return &ChecksDataSource{}
+}
+
+func (d *ChecksDataSource) Metadata(ctx context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
+	resp.TypeName = req.ProviderTypeName + "_checks"
+}
+
+func (d *ChecksDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
+	resp.Schema = schema.Schema{
+		Description: "Fetches all NodePing checks with optional filtering.",
+		MarkdownDescription: `
+Fetches all NodePing checks with optional filtering.
+
+## Example Usage
+
+` + "```hcl" + `
+data "nodeping_checks" "all" {}
+
+data "nodeping_checks" "http_only" {
+  type = "HTTP"
+}
+
+output "check_ids" {
+  value = [for c in data.nodeping_checks.all.checks : c.id]
+}
+` + "```" + `
+`,
+		Attributes: map[string]schema.Attribute{
+			"type": schema.StringAttribute{
+				Description: "Filter checks by type.",
+				Optional:    true,
+			},
+			"checks": schema.ListNestedAttribute{
+				Description: "List of checks.",
+				Computed:    true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"id": schema.StringAttribute{
+							Description: "The unique identifier of the check.",
+							Computed:    true,
+						},
+						"customer_id": schema.StringAttribute{
+							Description: "The customer ID (account ID) that owns this check.",
+							Computed:    true,
+						},
+						"type": schema.StringAttribute{
+							Description: "The type of check.",
+							Computed:    true,
+						},
+						"target": schema.StringAttribute{
+							Description: "The target URL, hostname, or IP address.",
+							Computed:    true,
+						},
+						"label": schema.StringAttribute{
+							Description: "The label for the check.",
+							Computed:    true,
+						},
+						"enabled": schema.BoolAttribute{
+							Description: "Whether the check is enabled.",
+							Computed:    true,
+						},
+						"interval": schema.Float64Attribute{
+							Description: "Check interval in minutes.",
+							Computed:    true,
+						},
+						"state": schema.Int64Attribute{
+							Description: "Current state (0 = failing, 1 = passing).",
+							Computed:    true,
+						},
+						"tags": schema.ListAttribute{
+							Description: "Tags for the check.",
+							Computed:    true,
+							ElementType: types.StringType,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func (d *ChecksDataSource) Configure(ctx context.Context, req datasource.ConfigureRequest, resp *datasource.ConfigureResponse) {
+	if req.ProviderData == nil {
+		return
+	}
+
+	c, ok := req.ProviderData.(*client.Client)
+	if !ok {
+		resp.Diagnostics.AddError(
+			"Unexpected Data Source Configure Type",
+			fmt.Sprintf("Expected *client.Client, got: %T.", req.ProviderData),
+		)
+		return
+	}
+
+	d.client = c
+}
+
+func (d *ChecksDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
+	var config ChecksDataSourceModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &config)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	tflog.Debug(ctx, "Reading checks data source")
+
+	checks, err := d.client.ListChecks(ctx)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Error Reading Checks",
+			"Could not list checks: "+err.Error(),
+		)
+		return
+	}
+
+	typeFilter := config.Type.ValueString()
+
+	config.Checks = make([]CheckModel, 0, len(checks))
+	for _, check := range checks {
+		if typeFilter != "" && check.Type != typeFilter {
+			continue
+		}
+
+		checkModel := CheckModel{
+			ID:         types.StringValue(check.ID),
+			CustomerID: types.StringValue(check.CustomerID),
+			Type:       types.StringValue(check.Type),
+			Target:     types.StringValue(check.Parameters.Target),
+			Label:      types.StringValue(check.Label),
+			Enabled:    types.BoolValue(check.Enabled == "active"),
+			State:      types.Int64Value(int64(check.State)),
+		}
+
+		if interval, err := check.Interval.Float64(); err == nil {
+			checkModel.Interval = types.Float64Value(interval)
+		}
+
+		if check.Tags != nil {
+			tags, _ := types.ListValueFrom(ctx, types.StringType, check.Tags)
+			checkModel.Tags = tags
+		} else {
+			checkModel.Tags = types.ListNull(types.StringType)
+		}
+
+		config.Checks = append(config.Checks, checkModel)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
+}

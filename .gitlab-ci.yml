@@ -1,0 +1,152 @@
+stages:
+  - lint
+  - security
+  - test
+  - build
+  - release
+
+variables:
+  GO_VERSION: "1.25"
+  GOLANGCI_LINT_VERSION: "v1.62.0"
+  GOSEC_VERSION: "v2.21.0"
+
+.go-cache:
+  variables:
+    GOPATH: $CI_PROJECT_DIR/.go
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - .go/pkg/mod/
+
+lint:
+  stage: lint
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  before_script:
+    - go install github.com/golangci/golangci-lint/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}
+  script:
+    - golangci-lint run --timeout 5m
+    - go mod tidy
+    - git diff --exit-code go.mod go.sum
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+fmt:
+  stage: lint
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  script:
+    - test -z "$(gofmt -l .)"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+security:
+  stage: security
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  before_script:
+    - go install github.com/securego/gosec/v2/cmd/gosec@${GOSEC_VERSION}
+  script:
+    - gosec -exclude-generated ./...
+  allow_failure: true
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+unit-test:
+  stage: test
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  script:
+    - go test -v -race -coverprofile=coverage.out ./...
+    - go tool cover -func=coverage.out
+  coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.out
+    paths:
+      - coverage.out
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+acceptance-test:
+  stage: test
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  variables:
+    TF_ACC: "1"
+  script:
+    - go test -v -timeout 30m ./...
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+  allow_failure: true
+
+build:
+  stage: build
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  script:
+    - go build -v -o terraform-provider-nodeping .
+  artifacts:
+    paths:
+      - terraform-provider-nodeping
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build-multi-platform:
+  stage: build
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  script:
+    - mkdir -p dist
+    - GOOS=linux GOARCH=amd64 go build -o dist/terraform-provider-nodeping_linux_amd64 .
+    - GOOS=linux GOARCH=arm64 go build -o dist/terraform-provider-nodeping_linux_arm64 .
+    - GOOS=darwin GOARCH=amd64 go build -o dist/terraform-provider-nodeping_darwin_amd64 .
+    - GOOS=darwin GOARCH=arm64 go build -o dist/terraform-provider-nodeping_darwin_arm64 .
+    - GOOS=windows GOARCH=amd64 go build -o dist/terraform-provider-nodeping_windows_amd64.exe .
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 week
+  rules:
+    - if: $CI_COMMIT_TAG
+
+sbom:
+  stage: build
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  before_script:
+    - go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@latest
+  script:
+    - cyclonedx-gomod mod -json -output sbom.json
+  artifacts:
+    paths:
+      - sbom.json
+    expire_in: 1 year
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+release:
+  stage: release
+  image: golang:${GO_VERSION}
+  extends: .go-cache
+  script:
+    - echo "Release ${CI_COMMIT_TAG}"
+  artifacts:
+    paths:
+      - dist/
+      - sbom.json
+  rules:
+    - if: $CI_COMMIT_TAG
