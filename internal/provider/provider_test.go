@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
@@ -15,7 +16,8 @@ func TestProviderSchema(t *testing.T) {
 		t.Fatalf("failed to create provider server: %v", err)
 	}
 
-	schemaResp, err := resp.GetProviderSchema(nil, &tfprotov6.GetProviderSchemaRequest{})
+	ctx := context.Background()
+	schemaResp, err := resp.GetProviderSchema(ctx, &tfprotov6.GetProviderSchemaRequest{})
 	if err != nil {
 		t.Fatalf("failed to get provider schema: %v", err)
 	}
@@ -37,11 +39,4 @@ func TestProviderSchema(t *testing.T) {
 			t.Errorf("expected attribute %q not found in provider schema", attr)
 		}
 	}
-}
-
-var testAccProtoV6ProviderFactories = map[string]func() (tfprotov6.ProviderServer, error){
-	"nodeping": providerserver.NewProtocol6WithError(New("test")()),
-}
-
-func testAccPreCheck(t *testing.T) {
 }
