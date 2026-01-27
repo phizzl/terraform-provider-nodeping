@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/nodeping/nodeping",
+		Address: "registry.terraform.io/phizzl/nodeping",
 		Debug:   debug,
 	}
 

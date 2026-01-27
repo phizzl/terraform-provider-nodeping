@@ -31,7 +31,7 @@ A Terraform provider for managing [NodePing](https://nodeping.com/) monitoring r
 terraform {
   required_providers {
     nodeping = {
-      source  = "nodeping/nodeping"
+      source  = "phizzl/nodeping"
       version = "~> 1.0"
     }
   }
