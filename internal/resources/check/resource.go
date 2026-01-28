@@ -656,21 +656,30 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 
 	if len(check.Notifications) > 0 {
 		model.Notifications = make([]NotificationModel, 0, len(check.Notifications))
+		// Track seen notifications to avoid duplicates
+		seen := make(map[string]bool)
 		for _, n := range check.Notifications {
 			for contactID, config := range n {
 				if configMap, ok := config.(map[string]interface{}); ok {
+					var delay int64
+					if d, ok := configMap["delay"].(float64); ok {
+						delay = int64(d)
+					}
+					schedule := "All"
+					if s, ok := configMap["schedule"].(string); ok {
+						schedule = s
+					}
+					// Create unique key for deduplication
+					key := fmt.Sprintf("%s:%d:%s", contactID, delay, schedule)
+					if seen[key] {
+						continue // Skip duplicate
+					}
+					seen[key] = true
+
 					notif := NotificationModel{
 						ContactID: types.StringValue(contactID),
-					}
-					if delay, ok := configMap["delay"].(float64); ok {
-						notif.Delay = types.Int64Value(int64(delay))
-					} else {
-						notif.Delay = types.Int64Value(0)
-					}
-					if schedule, ok := configMap["schedule"].(string); ok {
-						notif.Schedule = types.StringValue(schedule)
-					} else {
-						notif.Schedule = types.StringNull()
+						Delay:     types.Int64Value(delay),
+						Schedule:  types.StringValue(schedule),
 					}
 					model.Notifications = append(model.Notifications, notif)
 				}
