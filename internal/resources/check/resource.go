@@ -547,6 +547,30 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		model.ContentString = types.StringNull()
 	}
 
+	// Map boolean fields from API - handle interface{} types
+	model.Regex = types.BoolValue(parseBoolInterface(check.Parameters.Regex))
+	model.Invert = types.BoolValue(parseBoolInterface(check.Parameters.Invert))
+	model.Follow = types.BoolValue(parseBoolInterface(check.Parameters.Follow))
+	model.IPv6 = types.BoolValue(parseBoolInterface(check.Parameters.IPv6))
+	model.Verify = types.BoolValue(parseBoolInterface(check.Parameters.Verify))
+	model.DNSRD = types.BoolValue(parseBoolInterface(check.Parameters.DNSRD))
+	model.Mute = types.BoolValue(parseBoolInterface(check.Mute))
+
+	// Map statuscode from API
+	if statusCode, ok := check.Parameters.StatusCode.(float64); ok {
+		model.StatusCode = types.Int64Value(int64(statusCode))
+	} else if statusCode, ok := check.Parameters.StatusCode.(string); ok {
+		var sc int
+		fmt.Sscanf(statusCode, "%d", &sc)
+		if sc > 0 {
+			model.StatusCode = types.Int64Value(int64(sc))
+		} else {
+			model.StatusCode = types.Int64Null()
+		}
+	} else {
+		model.StatusCode = types.Int64Null()
+	}
+
 	if check.Parameters.Method != "" {
 		model.Method = types.StringValue(check.Parameters.Method)
 	} else {
@@ -634,4 +658,24 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 
 func normalizeURL(u string) string {
 	return strings.TrimSuffix(u, "/")
+}
+
+// parseBoolInterface converts various interface{} types to bool.
+// NodePing API returns booleans as bool, string ("true"/"false"), or numbers (0/1).
+func parseBoolInterface(v interface{}) bool {
+	if v == nil {
+		return false
+	}
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return val == "true" || val == "1"
+	case float64:
+		return val != 0
+	case int:
+		return val != 0
+	default:
+		return false
+	}
 }
