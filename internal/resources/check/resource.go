@@ -497,6 +497,32 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		model.Tags = types.ListNull(types.StringType)
 	}
 
+	// Handle RunLocations - API returns false when not set, or []string when set
+	switch rl := check.RunLocations.(type) {
+	case []interface{}:
+		locations := make([]string, 0, len(rl))
+		for _, loc := range rl {
+			if s, ok := loc.(string); ok {
+				locations = append(locations, s)
+			}
+		}
+		if len(locations) > 0 {
+			runLocs, _ := types.ListValueFrom(ctx, types.StringType, locations)
+			model.RunLocations = runLocs
+		} else {
+			model.RunLocations = types.ListNull(types.StringType)
+		}
+	case []string:
+		if len(rl) > 0 {
+			runLocs, _ := types.ListValueFrom(ctx, types.StringType, rl)
+			model.RunLocations = runLocs
+		} else {
+			model.RunLocations = types.ListNull(types.StringType)
+		}
+	default:
+		model.RunLocations = types.ListNull(types.StringType)
+	}
+
 	model.Target = types.StringValue(check.Parameters.Target)
 
 	if threshold, ok := check.Parameters.Threshold.(float64); ok {
