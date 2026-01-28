@@ -190,6 +190,9 @@ terraform import nodeping_contact.example 201205050153W2Q4C:201205050153W2Q4C-BK
 						"data": schema.StringAttribute{
 							Description: "Request body for webhook addresses (POST/PUT).",
 							Optional:    true,
+							PlanModifiers: []planmodifier.String{
+								JSONSemanticEqual(),
+							},
 						},
 						"priority": schema.Int64Attribute{
 							Description: "Priority for Pushover addresses. Valid values: -2 to 2.",
