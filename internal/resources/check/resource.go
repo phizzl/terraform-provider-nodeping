@@ -167,12 +167,27 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	// Preserve the original target from plan if API normalized it
 	originalTarget := plan.Target
+	// Preserve computed fields from plan to avoid "inconsistent result after apply" errors
+	// These fields change on every API call but Terraform expects the planned values
+	plannedModified := plan.Modified
+	plannedContentString := plan.ContentString
 
 	r.mapCheckToModel(ctx, check, &plan)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
 		plan.Target = originalTarget
+	}
+
+	// Restore planned modified value - API always returns new timestamp but Terraform
+	// expects the value from the plan (UseStateForUnknown preserves it)
+	if !plannedModified.IsUnknown() {
+		plan.Modified = plannedModified
+	}
+
+	// Restore planned contentstring if it was empty string but API returned empty
+	if !plannedContentString.IsNull() && plannedContentString.ValueString() == "" && plan.ContentString.ValueString() == "" {
+		plan.ContentString = plannedContentString
 	}
 
 	tflog.Debug(ctx, "Updated check", map[string]interface{}{
@@ -541,11 +556,9 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		model.Sens = types.Int64Value(int64(s))
 	}
 
-	if check.Parameters.ContentString != "" {
-		model.ContentString = types.StringValue(check.Parameters.ContentString)
-	} else {
-		model.ContentString = types.StringNull()
-	}
+	// ContentString: preserve empty string if it was set in config, otherwise null
+	// The API returns empty string as "", not null
+	model.ContentString = types.StringValue(check.Parameters.ContentString)
 
 	// Map boolean fields from API - only set if API returns a value
 	// These fields are check-type specific and may not be returned by the API
