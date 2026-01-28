@@ -26,7 +26,7 @@ type ContactAddress struct {
 	Action        string            `json:"action,omitempty"`
 	Headers       map[string]string `json:"headers,omitempty"`
 	QueryStrings  map[string]string `json:"querystrings,omitempty"`
-	Data          string            `json:"data,omitempty"`
+	Data          interface{}       `json:"data,omitempty"`
 	Priority      *int              `json:"priority,omitempty"`
 }
 

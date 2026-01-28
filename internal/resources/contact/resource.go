@@ -438,8 +438,32 @@ func mapAddressesToModel(ctx context.Context, apiAddresses map[string]client.Con
 			model.Action = types.StringNull()
 		}
 
-		if addr.Data != "" {
-			model.Data = types.StringValue(addr.Data)
+		if addr.Data != nil {
+			// Data can be a string or an object from the API
+			switch v := addr.Data.(type) {
+			case string:
+				if v != "" {
+					model.Data = types.StringValue(v)
+				} else {
+					model.Data = types.StringNull()
+				}
+			case map[string]interface{}:
+				// Convert object to JSON string
+				jsonBytes, err := json.Marshal(v)
+				if err == nil {
+					model.Data = types.StringValue(string(jsonBytes))
+				} else {
+					model.Data = types.StringNull()
+				}
+			default:
+				// Try to marshal whatever it is
+				jsonBytes, err := json.Marshal(v)
+				if err == nil {
+					model.Data = types.StringValue(string(jsonBytes))
+				} else {
+					model.Data = types.StringNull()
+				}
+			}
 		} else {
 			model.Data = types.StringNull()
 		}
