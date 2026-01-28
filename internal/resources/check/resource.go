@@ -547,28 +547,41 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		model.ContentString = types.StringNull()
 	}
 
-	// Map boolean fields from API - handle interface{} types
-	model.Regex = types.BoolValue(parseBoolInterface(check.Parameters.Regex))
-	model.Invert = types.BoolValue(parseBoolInterface(check.Parameters.Invert))
-	model.Follow = types.BoolValue(parseBoolInterface(check.Parameters.Follow))
-	model.IPv6 = types.BoolValue(parseBoolInterface(check.Parameters.IPv6))
-	model.Verify = types.BoolValue(parseBoolInterface(check.Parameters.Verify))
-	model.DNSRD = types.BoolValue(parseBoolInterface(check.Parameters.DNSRD))
-	model.Mute = types.BoolValue(parseBoolInterface(check.Mute))
+	// Map boolean fields from API - only set if API returns a value
+	// These fields are check-type specific and may not be returned by the API
+	if check.Parameters.Regex != nil {
+		model.Regex = types.BoolValue(parseBoolInterface(check.Parameters.Regex))
+	}
+	if check.Parameters.Invert != nil {
+		model.Invert = types.BoolValue(parseBoolInterface(check.Parameters.Invert))
+	}
+	if check.Parameters.Follow != nil {
+		model.Follow = types.BoolValue(parseBoolInterface(check.Parameters.Follow))
+	}
+	if check.Parameters.IPv6 != nil {
+		model.IPv6 = types.BoolValue(parseBoolInterface(check.Parameters.IPv6))
+	}
+	if check.Parameters.Verify != nil {
+		model.Verify = types.BoolValue(parseBoolInterface(check.Parameters.Verify))
+	}
+	if check.Parameters.DNSRD != nil {
+		model.DNSRD = types.BoolValue(parseBoolInterface(check.Parameters.DNSRD))
+	}
+	if check.Mute != nil {
+		model.Mute = types.BoolValue(parseBoolInterface(check.Mute))
+	}
 
-	// Map statuscode from API
-	if statusCode, ok := check.Parameters.StatusCode.(float64); ok {
-		model.StatusCode = types.Int64Value(int64(statusCode))
-	} else if statusCode, ok := check.Parameters.StatusCode.(string); ok {
-		var sc int
-		fmt.Sscanf(statusCode, "%d", &sc)
-		if sc > 0 {
-			model.StatusCode = types.Int64Value(int64(sc))
-		} else {
-			model.StatusCode = types.Int64Null()
+	// Map statuscode from API - only set if API returns a value
+	if check.Parameters.StatusCode != nil {
+		if statusCode, ok := check.Parameters.StatusCode.(float64); ok {
+			model.StatusCode = types.Int64Value(int64(statusCode))
+		} else if statusCode, ok := check.Parameters.StatusCode.(string); ok {
+			var sc int
+			fmt.Sscanf(statusCode, "%d", &sc)
+			if sc > 0 {
+				model.StatusCode = types.Int64Value(int64(sc))
+			}
 		}
-	} else {
-		model.StatusCode = types.Int64Null()
 	}
 
 	if check.Parameters.Method != "" {

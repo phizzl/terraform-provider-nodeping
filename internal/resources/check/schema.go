@@ -268,14 +268,10 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 			"regex": schema.BoolAttribute{
 				Description: "Treat contentstring as a regular expression.",
 				Optional:    true,
-				Computed:    true,
-				Default:     booldefault.StaticBool(false),
 			},
 			"invert": schema.BoolAttribute{
 				Description: "Invert the content match (does not contain).",
 				Optional:    true,
-				Computed:    true,
-				Default:     booldefault.StaticBool(false),
 			},
 			"follow": schema.BoolAttribute{
 				Description: "Follow redirects (HTTP checks).",
@@ -291,8 +287,6 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 			"statuscode": schema.Int64Attribute{
 				Description: "Expected HTTP status code.",
 				Optional:    true,
-				Computed:    true,
-				Default:     int64default.StaticInt64(200),
 			},
 			"sendheaders": schema.MapAttribute{
 				Description: "HTTP headers to send with the request.",
