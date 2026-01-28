@@ -7,6 +7,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/float64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -242,14 +243,23 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 			"state": schema.Int64Attribute{
 				Description: "Current state of the check (0 = failing, 1 = passing).",
 				Computed:    true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"created": schema.Int64Attribute{
 				Description: "Timestamp when the check was created.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"modified": schema.Int64Attribute{
 				Description: "Timestamp when the check was last modified.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"contentstring": schema.StringAttribute{
 				Description: "String to match in the response.",
@@ -258,10 +268,14 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 			"regex": schema.BoolAttribute{
 				Description: "Treat contentstring as a regular expression.",
 				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
 			},
 			"invert": schema.BoolAttribute{
 				Description: "Invert the content match (does not contain).",
 				Optional:    true,
+				Computed:    true,
+				Default:     booldefault.StaticBool(false),
 			},
 			"follow": schema.BoolAttribute{
 				Description: "Follow redirects (HTTP checks).",
@@ -277,6 +291,8 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 			"statuscode": schema.Int64Attribute{
 				Description: "Expected HTTP status code.",
 				Optional:    true,
+				Computed:    true,
+				Default:     int64default.StaticInt64(200),
 			},
 			"sendheaders": schema.MapAttribute{
 				Description: "HTTP headers to send with the request.",
