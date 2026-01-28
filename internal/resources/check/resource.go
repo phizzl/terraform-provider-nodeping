@@ -641,6 +641,19 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		model.ReceiveHeaders = types.MapNull(types.StringType)
 	}
 
+	// SSHKey and ClientCert can be string or bool from API
+	if sshKey, ok := check.Parameters.SSHKey.(string); ok && sshKey != "" {
+		model.SSHKey = types.StringValue(sshKey)
+	} else {
+		model.SSHKey = types.StringNull()
+	}
+
+	if clientCert, ok := check.Parameters.ClientCert.(string); ok && clientCert != "" {
+		model.ClientCert = types.StringValue(clientCert)
+	} else {
+		model.ClientCert = types.StringNull()
+	}
+
 	if len(check.Notifications) > 0 {
 		model.Notifications = make([]NotificationModel, 0, len(check.Notifications))
 		for _, n := range check.Notifications {

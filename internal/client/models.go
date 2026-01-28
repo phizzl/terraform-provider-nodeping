@@ -121,8 +121,8 @@ type CheckParameters struct {
 	Hosts          map[string]RedisHost  `json:"hosts,omitempty"`
 	RedisType      string                `json:"redistype,omitempty"`
 	SentinelName   string                `json:"sentinelname,omitempty"`
-	SSHKey         string                `json:"sshkey,omitempty"`
-	ClientCert     string                `json:"clientcert,omitempty"`
+	SSHKey         interface{}           `json:"sshkey,omitempty"`
+	ClientCert     interface{}           `json:"clientcert,omitempty"`
 	CheckToken     string                `json:"checktoken,omitempty"`
 	OldResultFail  interface{}           `json:"oldresultfail,omitempty"`
 	Ignore         string                `json:"ignore,omitempty"`
