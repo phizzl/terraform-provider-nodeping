@@ -67,6 +67,42 @@ resource "nodeping_contact" "example" {
 }
 ` + "```" + `
 
+### Webhook with JSON Body (MS Teams, Slack, etc.)
+
+When using webhooks with JSON bodies that contain newlines or special characters,
+use heredoc syntax with ` + "`chomp()`" + ` to avoid trailing newline issues:
+
+` + "```hcl" + `
+resource "nodeping_contact" "msteams" {
+  name     = "MS Teams Notifications"
+  custrole = "notify"
+
+  address {
+    type    = "webhook"
+    address = "https://outlook.office.com/webhook/..."
+    action  = "post"
+    headers = {
+      "content-type" = "application/json"
+    }
+    querystrings = {
+      "key" = "1"
+    }
+    # Use chomp() with heredoc to match exact API format
+    data = chomp(<<-EOT
+{"@context": "https://schema.org/extensions","@type": "MessageCard","title": "Host {label} : {type} is {event}","text": "Host {label} : {type} is {event} {if downtime}after {downtime} {if downminutes}minutes{else}minute{/if} of downtime {/if}as of {checktime}: 
+ {message}"}
+EOT
+)
+  }
+}
+` + "```" + `
+
+**Note:** The ` + "`data`" + ` field stores the exact string as provided. When importing
+existing contacts, the API may return JSON with specific formatting (spaces after
+colons, embedded newlines). Use heredoc with ` + "`chomp()`" + ` to match the exact format
+and avoid unnecessary plan diffs.
+
+
 ## Import
 
 Contacts can be imported using the contact ID:
