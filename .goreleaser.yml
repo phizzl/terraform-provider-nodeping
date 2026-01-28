@@ -1,3 +1,5 @@
+version: 2
+
 project_name: terraform-provider-nodeping
 
 before:
@@ -20,6 +22,8 @@ checksum:
 
 signs:
   - artifacts: checksum
+    output: "${artifact}.sig"
+    cmd: gpg
     args:
       - "--batch"
       - "--yes"
@@ -28,5 +32,6 @@ signs:
       - "--passphrase"
       - "{{ .Env.GPG_PASSPHRASE }}"
       - "--detach-sign"
-      - "--armor"
+      - "--output"
+      - "${signature}"
       - "${artifact}"
