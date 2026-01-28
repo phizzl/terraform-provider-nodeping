@@ -440,15 +440,17 @@ func mapAddressesToModel(ctx context.Context, apiAddresses map[string]client.Con
 
 		if addr.Data != nil {
 			// Data can be a string or an object from the API
+			// Always normalize to compact JSON for consistent comparison
 			switch v := addr.Data.(type) {
 			case string:
 				if v != "" {
-					model.Data = types.StringValue(v)
+					// Try to normalize JSON string to compact form
+					model.Data = types.StringValue(normalizeJSONString(v))
 				} else {
 					model.Data = types.StringNull()
 				}
 			case map[string]interface{}:
-				// Convert object to JSON string
+				// Convert object to compact JSON string
 				jsonBytes, err := json.Marshal(v)
 				if err == nil {
 					model.Data = types.StringValue(string(jsonBytes))
@@ -456,7 +458,7 @@ func mapAddressesToModel(ctx context.Context, apiAddresses map[string]client.Con
 					model.Data = types.StringNull()
 				}
 			default:
-				// Try to marshal whatever it is
+				// Try to marshal whatever it is to compact JSON
 				jsonBytes, err := json.Marshal(v)
 				if err == nil {
 					model.Data = types.StringValue(string(jsonBytes))
@@ -492,4 +494,21 @@ func mapAddressesToModel(ctx context.Context, apiAddresses map[string]client.Con
 	}
 
 	return result
+}
+
+// normalizeJSONString attempts to normalize a JSON string to compact form.
+// If the string is valid JSON, it returns the compact representation.
+// If not valid JSON, it returns the original string unchanged.
+func normalizeJSONString(s string) string {
+	var v interface{}
+	if err := json.Unmarshal([]byte(s), &v); err != nil {
+		// Not valid JSON, return as-is
+		return s
+	}
+	// Re-marshal to compact JSON
+	compact, err := json.Marshal(v)
+	if err != nil {
+		return s
+	}
+	return string(compact)
 }
