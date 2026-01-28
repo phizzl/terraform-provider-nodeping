@@ -567,9 +567,8 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 	if check.Parameters.DNSRD != nil {
 		model.DNSRD = types.BoolValue(parseBoolInterface(check.Parameters.DNSRD))
 	}
-	if check.Mute != nil {
-		model.Mute = types.BoolValue(parseBoolInterface(check.Mute))
-	}
+	// Mute is a top-level field that the API always returns
+	model.Mute = types.BoolValue(parseBoolInterface(check.Mute))
 
 	// Map statuscode from API - only set if API returns a value
 	if check.Parameters.StatusCode != nil {
