@@ -185,8 +185,9 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 		plan.Modified = plannedModified
 	}
 
-	// Restore planned contentstring if it was empty string but API returned empty
-	if !plannedContentString.IsNull() && plannedContentString.ValueString() == "" && plan.ContentString.ValueString() == "" {
+	// Restore planned contentstring to avoid null vs empty string mismatch
+	// If plan was null and API returned "", keep null. If plan was "" and API returned "", keep "".
+	if plan.ContentString.ValueString() == "" {
 		plan.ContentString = plannedContentString
 	}
 
