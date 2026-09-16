@@ -423,7 +423,7 @@ If this provider saves you time, you can support its development on Ko-fi:
 | Component | Version | Defined in |
 |-----------|---------|------------|
 | Go (toolchain used to build and test) | 1.27 | `Dockerfile`, `.github/workflows/` |
-| Go (minimum required) | 1.25.8 | `go.mod` |
+| Go (minimum required) | 1.26.0 | `go.mod` |
 | Terraform CLI (acceptance tests) | 1.14 | `Dockerfile` |
 | Alpine (runtime image) | 3.24 | `Dockerfile` |
 | terraform-plugin-framework | v1.19.0 | `go.mod` |
