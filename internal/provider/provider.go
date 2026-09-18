@@ -17,9 +17,12 @@ import (
 	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/check"
 	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/checks"
 	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/contact"
+	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/contactgroup"
+	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/contactgroups"
 	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/contacts"
 	checkresource "github.com/nodeping/terraform-provider-nodeping/internal/resources/check"
 	contactresource "github.com/nodeping/terraform-provider-nodeping/internal/resources/contact"
+	contactgroupresource "github.com/nodeping/terraform-provider-nodeping/internal/resources/contactgroup"
 )
 
 var _ provider.Provider = &NodePingProvider{}
@@ -250,6 +253,7 @@ func (p *NodePingProvider) Configure(ctx context.Context, req provider.Configure
 func (p *NodePingProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		contactresource.NewContactResource,
+		contactgroupresource.NewContactGroupResource,
 		checkresource.NewCheckResource,
 	}
 }
@@ -258,6 +262,8 @@ func (p *NodePingProvider) DataSources(ctx context.Context) []func() datasource.
 	return []func() datasource.DataSource{
 		contact.NewContactDataSource,
 		contacts.NewContactsDataSource,
+		contactgroup.NewContactGroupDataSource,
+		contactgroups.NewContactGroupsDataSource,
 		check.NewCheckDataSource,
 		checks.NewChecksDataSource,
 	}

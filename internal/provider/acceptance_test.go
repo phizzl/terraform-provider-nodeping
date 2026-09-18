@@ -391,3 +391,167 @@ resource "nodeping_check" "audio" {
 		},
 	})
 }
+
+// Contact groups bundle contact *address* IDs. The addresses are created via a
+// nodeping_contact so the IDs are real ones the API handed out.
+const accContactGroupBase = `
+resource "nodeping_contact" "grp_a" {
+  name = "acc-group-member-a"
+
+  address {
+    type    = "email"
+    address = "a@example.com"
+  }
+}
+
+resource "nodeping_contact" "grp_b" {
+  name = "acc-group-member-b"
+
+  address {
+    type    = "email"
+    address = "b@example.com"
+  }
+}
+`
+
+func TestAccContactGroupResource_lifecycle(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			// Create with a single member
+			{
+				Config: providerConfig(mock.URL()) + accContactGroupBase + `
+resource "nodeping_contactgroup" "test" {
+  name    = "acc-group"
+  members = [nodeping_contact.grp_a.address[0].id]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("nodeping_contactgroup.test", "name", "acc-group"),
+					resource.TestCheckResourceAttrSet("nodeping_contactgroup.test", "id"),
+					resource.TestCheckResourceAttrSet("nodeping_contactgroup.test", "customer_id"),
+					resource.TestCheckResourceAttr("nodeping_contactgroup.test", "members.#", "1"),
+					resource.TestCheckResourceAttrPair(
+						"nodeping_contactgroup.test", "members.0",
+						"nodeping_contact.grp_a", "address.0.id",
+					),
+				),
+			},
+			// Rename and add a second member
+			{
+				Config: providerConfig(mock.URL()) + accContactGroupBase + `
+resource "nodeping_contactgroup" "test" {
+  name = "acc-group-renamed"
+
+  members = [
+    nodeping_contact.grp_a.address[0].id,
+    nodeping_contact.grp_b.address[0].id,
+  ]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("nodeping_contactgroup.test", "name", "acc-group-renamed"),
+					resource.TestCheckResourceAttr("nodeping_contactgroup.test", "members.#", "2"),
+				),
+			},
+			// Clearing the membership must actually clear it, not be dropped
+			// from the request as an omitted field.
+			{
+				Config: providerConfig(mock.URL()) + accContactGroupBase + `
+resource "nodeping_contactgroup" "test" {
+  name    = "acc-group-renamed"
+  members = []
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("nodeping_contactgroup.test", "members.#", "0"),
+				),
+			},
+		},
+	})
+}
+
+func TestAccContactGroupResource_planIsEmptyAfterApply(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	config := providerConfig(mock.URL()) + accContactGroupBase + `
+resource "nodeping_contactgroup" "idempotent" {
+  name    = "acc-group-idempotent"
+  members = [nodeping_contact.grp_a.address[0].id]
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{Config: config},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}
+
+// A group with neither a name nor members is valid per the API; both
+// attributes are optional.
+func TestAccContactGroupResource_minimal(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	config := providerConfig(mock.URL()) + `
+resource "nodeping_contactgroup" "minimal" {
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("nodeping_contactgroup.minimal", "id"),
+				),
+			},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}
+
+func TestAccContactGroupDataSource_readsBack(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(mock.URL()) + accContactGroupBase + `
+resource "nodeping_contactgroup" "src" {
+  name    = "acc-group-ds"
+  members = [nodeping_contact.grp_a.address[0].id]
+}
+
+data "nodeping_contactgroup" "by_id" {
+  id = nodeping_contactgroup.src.id
+}
+
+data "nodeping_contactgroups" "all" {
+  depends_on = [nodeping_contactgroup.src]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.nodeping_contactgroup.by_id", "name", "acc-group-ds"),
+					resource.TestCheckResourceAttr("data.nodeping_contactgroup.by_id", "members.#", "1"),
+					resource.TestCheckResourceAttrPair(
+						"data.nodeping_contactgroup.by_id", "members.0",
+						"nodeping_contactgroup.src", "members.0",
+					),
+					resource.TestCheckResourceAttr("data.nodeping_contactgroups.all", "contactgroups.#", "1"),
+					resource.TestCheckResourceAttr("data.nodeping_contactgroups.all", "contactgroups.0.name", "acc-group-ds"),
+				),
+			},
+		},
+	})
+}

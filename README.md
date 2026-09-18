@@ -15,6 +15,7 @@ A Terraform provider for managing [NodePing](https://nodeping.com/) monitoring r
 ## Features
 
 - **Contacts Management**: Create, read, update, and delete NodePing contacts with multiple notification addresses
+- **Contact Groups**: Bundle contact addresses into groups so a check can notify all of them through one entry
 - **Checks Management**: Full CRUD support for all 30+ NodePing check types
 - **Multi-Account Support**: Manage resources across primary accounts and SubAccounts using provider aliases
 - **Secure Authentication**: API token via configuration or environment variables
@@ -278,6 +279,35 @@ Manages a NodePing monitoring check.
 | `runlocations` | list | No | Probe locations |
 | `tags` | list | No | Tags for grouping |
 
+### nodeping_contactgroup
+
+Manages a NodePing contact group. Members are contact **address** IDs, not contact IDs.
+
+**Example:**
+
+```hcl
+resource "nodeping_contactgroup" "escalation" {
+  name = "Escalation"
+
+  members = [
+    nodeping_contact.oncall.address[0].id,
+    nodeping_contact.backup.address[0].id,
+  ]
+}
+
+resource "nodeping_check" "site" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "Website"
+
+  notifications {
+    contact_id = nodeping_contactgroup.escalation.id
+    delay      = 0
+    schedule   = "All"
+  }
+}
+```
+
 ## Data Sources
 
 ### nodeping_contact
@@ -296,6 +326,24 @@ Fetch all contacts.
 
 ```hcl
 data "nodeping_contacts" "all" {}
+```
+
+### nodeping_contactgroup
+
+Fetch a single contact group by ID.
+
+```hcl
+data "nodeping_contactgroup" "escalation" {
+  id = "201205050153W2Q4C-G-1ZIYU"
+}
+```
+
+### nodeping_contactgroups
+
+Fetch all contact groups.
+
+```hcl
+data "nodeping_contactgroups" "all" {}
 ```
 
 ### nodeping_check

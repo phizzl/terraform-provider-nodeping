@@ -9,16 +9,18 @@ import (
 )
 
 type MockNodePingServer struct {
-	Server   *httptest.Server
-	mu       sync.RWMutex
-	contacts map[string]map[string]interface{}
-	checks   map[string]map[string]interface{}
+	Server        *httptest.Server
+	mu            sync.RWMutex
+	contacts      map[string]map[string]interface{}
+	checks        map[string]map[string]interface{}
+	contactgroups map[string]map[string]interface{}
 }
 
 func NewMockNodePingServer() *MockNodePingServer {
 	m := &MockNodePingServer{
-		contacts: make(map[string]map[string]interface{}),
-		checks:   make(map[string]map[string]interface{}),
+		contacts:      make(map[string]map[string]interface{}),
+		checks:        make(map[string]map[string]interface{}),
+		contactgroups: make(map[string]map[string]interface{}),
 	}
 
 	mux := http.NewServeMux()
@@ -26,6 +28,8 @@ func NewMockNodePingServer() *MockNodePingServer {
 	mux.HandleFunc("/contacts/", m.handleContact)
 	mux.HandleFunc("/checks", m.handleChecks)
 	mux.HandleFunc("/checks/", m.handleCheck)
+	mux.HandleFunc("/contactgroups", m.handleContactGroups)
+	mux.HandleFunc("/contactgroups/", m.handleContactGroup)
 
 	m.Server = httptest.NewServer(mux)
 	return m
@@ -277,6 +281,104 @@ func (m *MockNodePingServer) handleCheck(w http.ResponseWriter, r *http.Request)
 	}
 }
 
+// members always round-trips as a []string, even when the request omitted it,
+// so an empty group comes back as an empty list rather than a missing key.
+func contactGroupMembers(req map[string]interface{}) []interface{} {
+	raw, ok := req["members"].([]interface{})
+	if !ok || raw == nil {
+		return []interface{}{}
+	}
+	return raw
+}
+
+func (m *MockNodePingServer) handleContactGroups(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	switch r.Method {
+	case http.MethodGet:
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(m.contactgroups)
+
+	case http.MethodPost:
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid JSON"}`, http.StatusBadRequest)
+			return
+		}
+
+		id := "MOCK-CUSTOMER-G-" + generateID()
+		group := map[string]interface{}{
+			"_id":         id,
+			"type":        "group",
+			"customer_id": "MOCK-CUSTOMER",
+			"name":        req["name"],
+			"members":     contactGroupMembers(req),
+		}
+
+		m.contactgroups[id] = group
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(group)
+
+	default:
+		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+	}
+}
+
+func (m *MockNodePingServer) handleContactGroup(w http.ResponseWriter, r *http.Request) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	id := strings.TrimPrefix(r.URL.Path, "/contactgroups/")
+
+	switch r.Method {
+	case http.MethodGet:
+		group, ok := m.contactgroups[id]
+		if !ok {
+			http.Error(w, `{"error": "contact group not found"}`, http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(group)
+
+	case http.MethodPut:
+		group, ok := m.contactgroups[id]
+		if !ok {
+			http.Error(w, `{"error": "contact group not found"}`, http.StatusNotFound)
+			return
+		}
+
+		var req map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid JSON"}`, http.StatusBadRequest)
+			return
+		}
+
+		if name, ok := req["name"]; ok {
+			group["name"] = name
+		}
+		// An update replaces the membership wholesale, so clearing a group has
+		// to actually clear it.
+		group["members"] = contactGroupMembers(req)
+
+		m.contactgroups[id] = group
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(group)
+
+	case http.MethodDelete:
+		if _, ok := m.contactgroups[id]; !ok {
+			http.Error(w, `{"error": "contact group not found"}`, http.StatusNotFound)
+			return
+		}
+		delete(m.contactgroups, id)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"ok": true, "id": id})
+
+	default:
+		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+	}
+}
+
 var idCounter int
 var idMu sync.Mutex
 
@@ -304,6 +406,19 @@ func (m *MockNodePingServer) GetContact(id string) (map[string]interface{}, bool
 	defer m.mu.RUnlock()
 	c, ok := m.contacts[id]
 	return c, ok
+}
+
+func (m *MockNodePingServer) AddContactGroup(id string, group map[string]interface{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.contactgroups[id] = group
+}
+
+func (m *MockNodePingServer) GetContactGroup(id string) (map[string]interface{}, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	g, ok := m.contactgroups[id]
+	return g, ok
 }
 
 func (m *MockNodePingServer) GetCheck(id string) (map[string]interface{}, bool) {

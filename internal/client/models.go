@@ -46,6 +46,30 @@ type NewAddress struct {
 	Priority      *int              `json:"priority,omitempty"`
 }
 
+// ContactGroup groups contact addresses so a check can notify all of them
+// through a single notification entry.
+type ContactGroup struct {
+	ID         string   `json:"_id,omitempty"`
+	Type       string   `json:"type,omitempty"`
+	CustomerID string   `json:"customer_id,omitempty"`
+	Name       string   `json:"name,omitempty"`
+	Members    []string `json:"members,omitempty"`
+}
+
+type ContactGroupCreateRequest struct {
+	Name string `json:"name,omitempty"`
+	// Members holds contact *address* IDs, not contact IDs.
+	Members []string `json:"members,omitempty"`
+}
+
+type ContactGroupUpdateRequest struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+	// Members is sent even when empty so that removing every member from a
+	// group actually clears it instead of being omitted from the request.
+	Members []string `json:"members"`
+}
+
 type ContactCreateRequest struct {
 	Name         string       `json:"name,omitempty"`
 	CustRole     string       `json:"custrole,omitempty"`
