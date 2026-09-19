@@ -24,7 +24,7 @@ A Terraform provider for managing [NodePing](https://nodeping.com/) monitoring r
 ## Requirements
 
 - [Terraform](https://www.terraform.io/downloads.html) >= 1.14
-- [Go](https://golang.org/doc/install) >= 1.25 (for building from source)
+- [Go](https://golang.org/doc/install) >= 1.26 (for building from source)
 - A [NodePing](https://nodeping.com/) account with API access
 
 ## Installation
@@ -36,7 +36,7 @@ terraform {
   required_providers {
     nodeping = {
       source  = "phizzl/nodeping"
-      version = "~> 0.2"
+      version = "~> 0.3"
     }
   }
 }
@@ -363,11 +363,21 @@ output "expected_content" {
 
 ### nodeping_checks
 
-Fetch all checks with optional filtering.
+Fetch all checks with optional filtering. Each entry carries the same attributes
+as `nodeping_check`, including the check-type specific parameters, and the list
+is ordered by ID.
 
 ```hcl
 data "nodeping_checks" "http_only" {
   type = "HTTP"
+}
+
+# Filtering on a check-type specific parameter
+output "following_redirects" {
+  value = [
+    for c in data.nodeping_checks.http_only.checks : c.label
+    if c.follow == true
+  ]
 }
 ```
 
@@ -393,6 +403,16 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 terraform import nodeping_check.example CUSTOMER_ID:201205050153W2Q4C-0J2HSIRF
 ```
 
+### Import a Contact Group
+
+```bash
+# Primary account
+terraform import nodeping_contactgroup.example 201205050153W2Q4C-G-1ZIYU
+
+# SubAccount
+terraform import nodeping_contactgroup.example CUSTOMER_ID:201205050153W2Q4C-G-1ZIYU
+```
+
 ## Security Considerations
 
 ### Sensitive Data
@@ -400,6 +420,11 @@ terraform import nodeping_check.example CUSTOMER_ID:201205050153W2Q4C-0J2HSIRF
 - **API Token**: Marked as sensitive; never logged or stored in state
 - **Contact Addresses**: Email addresses and phone numbers are marked as sensitive
 - **Passwords**: Check passwords (FTP, SSH, etc.) are marked as sensitive
+- **SNMP community strings**: `snmpcom` is treated as a credential and redacted
+- **Data sources never expose credentials**: `nodeping_check` and
+  `nodeping_checks` omit `password` and `snmpcom` entirely. `sshkey` and
+  `clientcert` return NodePing's identifier for a stored key, not the key
+  material.
 
 ### Terraform State
 
