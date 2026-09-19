@@ -1,19 +1,27 @@
-# Fetch all checks
-data "nodeping_checks" "all" {}
-
-# Fetch only HTTP checks
-data "nodeping_checks" "http_only" {
+data "nodeping_checks" "http" {
   type = "HTTP"
 }
 
-output "all_check_ids" {
-  value = [for c in data.nodeping_checks.all.checks : c.id]
+output "targets" {
+  value = [for c in data.nodeping_checks.http.checks : c.target]
 }
 
-output "http_check_labels" {
-  value = [for c in data.nodeping_checks.http_only.checks : c.label]
+# Filtering on a check-type specific parameter.
+output "following_redirects" {
+  value = [
+    for c in data.nodeping_checks.http.checks : c.label
+    if c.follow == true
+  ]
 }
 
-output "failing_checks" {
-  value = [for c in data.nodeping_checks.all.checks : c.label if c.state == 0]
+# Checks whose TLS warning window is shorter than two weeks.
+data "nodeping_checks" "ssl" {
+  type = "SSL"
+}
+
+output "short_warning_window" {
+  value = [
+    for c in data.nodeping_checks.ssl.checks : c.label
+    if c.warningdays != null && c.warningdays < 14
+  ]
 }

@@ -1,17 +1,16 @@
-# Fetch a single check by ID
 data "nodeping_check" "example" {
   id = "201205050153W2Q4C-0J2HSIRF"
 }
 
-output "check_label" {
-  value = data.nodeping_check.example.label
+output "check_target" {
+  value = data.nodeping_check.example.target
 }
 
-output "check_state" {
-  description = "0 = failing, 1 = passing"
-  value       = data.nodeping_check.example.state
+# Check-type specific parameters are available too.
+output "expected_content" {
+  value = data.nodeping_check.example.contentstring
 }
 
-output "check_enabled" {
-  value = data.nodeping_check.example.enabled
+output "expected_status" {
+  value = data.nodeping_check.example.statuscode
 }

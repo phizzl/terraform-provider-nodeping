@@ -7,7 +7,7 @@ description: |-
 
 # nodeping_check (Data Source)
 
-Fetches a NodePing check by ID.
+Fetches a NodePing check by ID, including the check-type specific parameters.
 
 ## Example Usage
 
@@ -16,17 +16,12 @@ data "nodeping_check" "example" {
   id = "201205050153W2Q4C-0J2HSIRF"
 }
 
-output "check_label" {
-  value = data.nodeping_check.example.label
+output "check_target" {
+  value = data.nodeping_check.example.target
 }
 
-output "check_state" {
-  description = "0 = failing, 1 = passing"
-  value       = data.nodeping_check.example.state
-}
-
-output "check_enabled" {
-  value = data.nodeping_check.example.enabled
+output "expected_content" {
+  value = data.nodeping_check.example.contentstring
 }
 ```
 
@@ -37,16 +32,52 @@ output "check_enabled" {
 ## Attribute Reference
 
 - `customer_id` - The customer ID (account ID) that owns this check.
-- `type` - The type of check.
-- `target` - The target URL, hostname, or IP address.
-- `label` - The display label for the check.
+- `type` - The check type, for example HTTP, PING or SSL.
+- `target` - The target the check runs against.
+- `label` - The display label of the check.
 - `enabled` - Whether the check is enabled.
-- `public` - Whether public reports are enabled.
-- `interval` - Check interval in minutes.
-- `threshold` - Timeout in seconds.
-- `sens` - Sensitivity (rechecks before status change).
-- `state` - Current state: `0` (failing) or `1` (passing).
-- `created` - Creation timestamp (milliseconds).
-- `modified` - Last modification timestamp (milliseconds).
-- `description` - Description of the check.
-- `tags` - List of tags.
+- `public` - Whether the check has a public reports page.
+- `interval` - How often the check runs, in minutes.
+- `threshold` - Timeout in seconds for the check.
+- `sens` - Number of rechecks before the check is considered down.
+- `mute` - Whether notifications for this check are muted.
+- `autodiag` - Whether automatic diagnostics are enabled.
+- `dep` - ID of the check this one depends on for notifications.
+- `state` - Current state of the check (0 = failing, 1 = passing).
+- `created` / `modified` - Timestamps in milliseconds.
+- `description` - Free-form description of the check.
+- `tags` - Tags assigned to the check.
+- `runlocations` - Probe locations the check runs from.
+- `homeloc` - Preferred probe location for the check.
+
+### HTTP family
+
+- `contentstring`, `regex`, `invert`, `follow`, `method`, `statuscode`,
+  `sendheaders`, `receiveheaders`, `postdata`
+
+### Connection
+
+- `port`, `username`, `secure`, `verify`, `ipv6`, `servername`, `transport`
+
+### DNS
+
+- `dnstype`, `dnstoresolve`, `dnssection`, `dnsrd`
+
+### Certificates
+
+- `warningdays`, `clientcert`
+
+### Databases and services
+
+- `email`, `database`, `query`, `namespace`, `sshkey`, `snmpv`
+
+### Audio
+
+- `verifyvolume`, `volumemin`
+
+## Credentials
+
+`password` and `snmpcom` are **not** exposed. A data source exists to be read,
+and its values land in state and in plan output, so a stored secret has no
+business there. `sshkey` and `clientcert` are exposed because the API returns
+NodePing's *identifier* for a stored key, not the key material.

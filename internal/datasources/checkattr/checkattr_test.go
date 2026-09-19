@@ -1,0 +1,322 @@
+package checkattr
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/diag"
+
+	"github.com/nodeping/terraform-provider-nodeping/internal/client"
+)
+
+func TestBool(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input interface{}
+		want  bool
+	}{
+		{name: "nil", input: nil, want: false},
+		{name: "bool true", input: true, want: true},
+		{name: "bool false", input: false, want: false},
+		{name: `string "true"`, input: "true", want: true},
+		{name: `string "1"`, input: "1", want: true},
+		{name: `string "false"`, input: "false", want: false},
+		{name: "empty string", input: "", want: false},
+		// The API only ever sends lowercase, so the comparison stays exact.
+		{name: `string "True" is not truthy`, input: "True", want: false},
+		{name: "float64 1", input: float64(1), want: true},
+		{name: "float64 0", input: float64(0), want: false},
+		{name: "int 1", input: 1, want: true},
+		{name: "unhandled type does not panic", input: []string{"true"}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := Bool(tt.input); got != tt.want {
+				t.Errorf("Bool(%#v) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// An absent field must stay null. Reporting false would make "this check type
+// does not use the flag" indistinguishable from "the flag is off".
+func TestOptionalBool(t *testing.T) {
+	t.Parallel()
+
+	if got := OptionalBool(nil); !got.IsNull() {
+		t.Errorf("OptionalBool(nil) = %v, want null", got)
+	}
+	if got := OptionalBool(false); got.IsNull() || got.ValueBool() {
+		t.Errorf("OptionalBool(false) = %v, want a non-null false", got)
+	}
+	if got := OptionalBool("true"); got.IsNull() || !got.ValueBool() {
+		t.Errorf(`OptionalBool("true") = %v, want a non-null true`, got)
+	}
+}
+
+func TestOptionalInt64(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    interface{}
+		wantNull bool
+		want     int64
+	}{
+		{name: "nil is null", input: nil, wantNull: true},
+		{name: "float64", input: float64(42), want: 42},
+		{name: "float64 truncates", input: float64(42.9), want: 42},
+		{name: "int", input: 7, want: 7},
+		{name: "int64", input: int64(9), want: 9},
+		// NodePing stringifies some numbers, e.g. threshold and sens.
+		{name: "numeric string", input: "5", want: 5},
+		{name: "negative numeric string", input: "-40", want: -40},
+		{name: "non-numeric string is null", input: "abc", wantNull: true},
+		{name: "unhandled type is null", input: []int{1}, wantNull: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := OptionalInt64(tt.input)
+			if tt.wantNull {
+				if !got.IsNull() {
+					t.Errorf("OptionalInt64(%#v) = %v, want null", tt.input, got)
+				}
+				return
+			}
+			if got.IsNull() {
+				t.Fatalf("OptionalInt64(%#v) = null, want %d", tt.input, tt.want)
+			}
+			if got.ValueInt64() != tt.want {
+				t.Errorf("OptionalInt64(%#v) = %d, want %d", tt.input, got.ValueInt64(), tt.want)
+			}
+		})
+	}
+}
+
+func TestOptionalString(t *testing.T) {
+	t.Parallel()
+
+	if got := OptionalString(""); !got.IsNull() {
+		t.Errorf(`OptionalString("") = %v, want null`, got)
+	}
+	if got := OptionalString("x"); got.IsNull() || got.ValueString() != "x" {
+		t.Errorf(`OptionalString("x") = %v, want "x"`, got)
+	}
+}
+
+// sshkey, clientcert, secure and homeloc are typed interface{} because the API
+// answers with `false` when they are unset.
+func TestStringFromInterface(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    interface{}
+		wantNull bool
+		want     string
+	}{
+		{name: "string passes through", input: "KEY123", want: "KEY123"},
+		{name: "false becomes null", input: false, wantNull: true},
+		{name: "nil becomes null", input: nil, wantNull: true},
+		{name: "empty string becomes null", input: "", wantNull: true},
+		{name: "number becomes null", input: float64(0), wantNull: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := stringFromInterface(tt.input)
+			if tt.wantNull {
+				if !got.IsNull() {
+					t.Errorf("got %v, want null", got)
+				}
+				return
+			}
+			if got.ValueString() != tt.want {
+				t.Errorf("got %q, want %q", got.ValueString(), tt.want)
+			}
+		})
+	}
+}
+
+func TestRunLocations(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    interface{}
+		wantNull bool
+		want     []string
+	}{
+		{
+			name:  "decoded JSON array",
+			input: []interface{}{"nam", "eur"},
+			want:  []string{"nam", "eur"},
+		},
+		{
+			name:  "already a string slice",
+			input: []string{"nam"},
+			want:  []string{"nam"},
+		},
+		{
+			// This is the shape the API uses for "no locations pinned".
+			name:     "false becomes null",
+			input:    false,
+			wantNull: true,
+		},
+		{name: "nil becomes null", input: nil, wantNull: true},
+		{name: "empty array becomes null", input: []interface{}{}, wantNull: true},
+		{
+			name:  "non-string elements are skipped",
+			input: []interface{}{"nam", 42},
+			want:  []string{"nam"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var diags diag.Diagnostics
+			got := RunLocations(context.Background(), tt.input, &diags)
+
+			if diags.HasError() {
+				t.Fatalf("unexpected diagnostics: %+v", diags)
+			}
+			if tt.wantNull {
+				if !got.IsNull() {
+					t.Errorf("got %v, want null", got)
+				}
+				return
+			}
+
+			var elems []string
+			if d := got.ElementsAs(context.Background(), &elems, false); d.HasError() {
+				t.Fatalf("failed to read list: %+v", d)
+			}
+			if len(elems) != len(tt.want) {
+				t.Fatalf("got %#v, want %#v", elems, tt.want)
+			}
+			for i := range tt.want {
+				if elems[i] != tt.want[i] {
+					t.Errorf("index %d: got %q, want %q", i, elems[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestFromAPIMapsTypeSpecificParameters(t *testing.T) {
+	t.Parallel()
+
+	check := &client.Check{
+		ID:         "CHK1",
+		CustomerID: "CUST1",
+		Type:       "HTTPCONTENT",
+		Label:      "example",
+		Enabled:    "active",
+		Interval:   json.Number("5"),
+		State:      1,
+		Parameters: client.CheckParameters{
+			Target:        "https://example.com",
+			Threshold:     float64(5),
+			Sens:          "2",
+			ContentString: "all good",
+			Regex:         "false",
+			Follow:        true,
+			Method:        "GET",
+			StatusCode:    float64(200),
+			SendHeaders:   map[string]string{"accept": "application/json"},
+			Port:          float64(8443),
+			Username:      "svc",
+			Password:      "must-not-surface",
+			SNMPCom:       "must-not-surface",
+			SSHKey:        false,
+			WarningDays:   float64(30),
+		},
+	}
+
+	var diags diag.Diagnostics
+	m := FromAPI(context.Background(), check, &diags)
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %+v", diags)
+	}
+
+	if m.Target.ValueString() != "https://example.com" {
+		t.Errorf("Target = %q", m.Target.ValueString())
+	}
+	if m.ContentString.ValueString() != "all good" {
+		t.Errorf("ContentString = %q", m.ContentString.ValueString())
+	}
+	if m.Threshold.ValueInt64() != 5 {
+		t.Errorf("Threshold = %d", m.Threshold.ValueInt64())
+	}
+	// Sens arrives as a string and has to survive as a number.
+	if m.Sens.ValueInt64() != 2 {
+		t.Errorf("Sens = %d", m.Sens.ValueInt64())
+	}
+	if m.StatusCode.ValueInt64() != 200 {
+		t.Errorf("StatusCode = %d", m.StatusCode.ValueInt64())
+	}
+	if m.Port.ValueInt64() != 8443 {
+		t.Errorf("Port = %d", m.Port.ValueInt64())
+	}
+	if m.WarningDays.ValueInt64() != 30 {
+		t.Errorf("WarningDays = %d", m.WarningDays.ValueInt64())
+	}
+	if m.Regex.IsNull() || m.Regex.ValueBool() {
+		t.Errorf(`Regex = %v, want non-null false (API sent "false")`, m.Regex)
+	}
+	if m.Follow.IsNull() || !m.Follow.ValueBool() {
+		t.Errorf("Follow = %v, want non-null true", m.Follow)
+	}
+	// Not set by this check type, so it must be null rather than false.
+	if !m.Invert.IsNull() {
+		t.Errorf("Invert = %v, want null", m.Invert)
+	}
+	if !m.SSHKey.IsNull() {
+		t.Errorf("SSHKey = %v, want null when the API sends false", m.SSHKey)
+	}
+	if m.Username.ValueString() != "svc" {
+		t.Errorf("Username = %q", m.Username.ValueString())
+	}
+	if !m.Enabled.ValueBool() {
+		t.Error("Enabled should be true for enable=active")
+	}
+}
+
+// The model must not carry a field for any credential, so a secret cannot end
+// up in state through a data source.
+func TestModelHasNoCredentialFields(t *testing.T) {
+	t.Parallel()
+
+	attrs := Attributes()
+	for _, forbidden := range []string{"password", "snmpcom", "checktoken"} {
+		if _, ok := attrs[forbidden]; ok {
+			t.Errorf("attribute %q must not be exposed by a data source", forbidden)
+		}
+	}
+}
+
+// Every attribute needs a description; they become the registry documentation.
+func TestAttributesAreDocumentedAndComputed(t *testing.T) {
+	t.Parallel()
+
+	for name, attr := range Attributes() {
+		if attr.GetDescription() == "" && attr.GetMarkdownDescription() == "" {
+			t.Errorf("attribute %q has no description", name)
+		}
+		if !attr.IsComputed() {
+			t.Errorf("attribute %q must be Computed", name)
+		}
+	}
+}

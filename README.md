@@ -348,11 +348,16 @@ data "nodeping_contactgroups" "all" {}
 
 ### nodeping_check
 
-Fetch a single check by ID.
+Fetch a single check by ID, including the check-type specific parameters.
+Credentials (`password`, `snmpcom`) are deliberately not exposed.
 
 ```hcl
 data "nodeping_check" "example" {
   id = "201205050153W2Q4C-0J2HSIRF"
+}
+
+output "expected_content" {
+  value = data.nodeping_check.example.contentstring
 }
 ```
 

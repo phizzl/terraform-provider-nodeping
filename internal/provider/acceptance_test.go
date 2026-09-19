@@ -556,6 +556,106 @@ data "nodeping_contactgroups" "all" {
 	})
 }
 
+// Regression test for the gap tracked in #5: the check data sources used to
+// expose only the common envelope, so no check-type specific parameter could
+// be read back.
+func TestAccCheckDataSource_exposesTypeSpecificParameters(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(mock.URL()) + `
+resource "nodeping_check" "src" {
+  type          = "HTTPCONTENT"
+  target        = "https://example.com/health"
+  label         = "acc-ds-params"
+  interval      = 5
+  contentstring = "all good"
+  method        = "GET"
+  statuscode    = 200
+  follow        = true
+  port          = 8443
+  username      = "svc"
+  password      = "s3cret"
+  warningdays   = 30
+}
+
+data "nodeping_check" "by_id" {
+  id = nodeping_check.src.id
+}
+
+data "nodeping_checks" "all" {
+  type       = "HTTPCONTENT"
+  depends_on = [nodeping_check.src]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// The envelope still works.
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "label", "acc-ds-params"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "type", "HTTPCONTENT"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "target", "https://example.com/health"),
+
+					// The point of the change: type-specific parameters.
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "contentstring", "all good"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "method", "GET"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "statuscode", "200"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "follow", "true"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "port", "8443"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "username", "svc"),
+					resource.TestCheckResourceAttr("data.nodeping_check.by_id", "warningdays", "30"),
+
+					// The plural carries the same shape.
+					resource.TestCheckResourceAttr("data.nodeping_checks.all", "checks.#", "1"),
+					resource.TestCheckResourceAttr("data.nodeping_checks.all", "checks.0.contentstring", "all good"),
+					resource.TestCheckResourceAttr("data.nodeping_checks.all", "checks.0.statuscode", "200"),
+					resource.TestCheckResourceAttr("data.nodeping_checks.all", "checks.0.port", "8443"),
+				),
+			},
+		},
+	})
+}
+
+// Credentials must never reach state through a data source, even when the
+// resource that created the check set them.
+func TestAccCheckDataSource_omitsCredentials(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(mock.URL()) + `
+resource "nodeping_check" "creds" {
+  type     = "SNMP"
+  target   = "1.2.3.4"
+  label    = "acc-ds-creds"
+  username = "svc"
+  password = "s3cret"
+  snmpv    = "2c"
+  snmpcom  = "public-but-secret"
+}
+
+data "nodeping_check" "creds" {
+  id = nodeping_check.creds.id
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					// Non-secret neighbours are readable...
+					resource.TestCheckResourceAttr("data.nodeping_check.creds", "username", "svc"),
+					resource.TestCheckResourceAttr("data.nodeping_check.creds", "snmpv", "2c"),
+					// ...while the secrets have no attribute at all.
+					resource.TestCheckNoResourceAttr("data.nodeping_check.creds", "password"),
+					resource.TestCheckNoResourceAttr("data.nodeping_check.creds", "snmpcom"),
+				),
+			},
+		},
+	})
+}
+
 // Regression test: a check with a password used to fail every apply with
 // ".password: inconsistent values for sensitive attribute". NodePing does not
 // echo credentials back, so mapping the response nulled the configured value.

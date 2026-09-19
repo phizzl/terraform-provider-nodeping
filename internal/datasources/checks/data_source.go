@@ -3,6 +3,7 @@ package checks
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -10,6 +11,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/nodeping/terraform-provider-nodeping/internal/client"
+	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/checkattr"
 )
 
 var _ datasource.DataSource = &ChecksDataSource{}
@@ -24,18 +26,9 @@ type ChecksDataSourceModel struct {
 	Checks []CheckModel `tfsdk:"checks"`
 }
 
-type CheckModel struct {
-	ID         types.String  `tfsdk:"id"`
-	CustomerID types.String  `tfsdk:"customer_id"`
-	Type       types.String  `tfsdk:"type"`
-	Target     types.String  `tfsdk:"target"`
-	Label      types.String  `tfsdk:"label"`
-	Enabled    types.Bool    `tfsdk:"enabled"`
-	Interval   types.Float64 `tfsdk:"interval"`
-	Dep        types.String  `tfsdk:"dep"`
-	State      types.Int64   `tfsdk:"state"`
-	Tags       types.List    `tfsdk:"tags"`
-}
+// CheckModel is the same shape the singular data source returns, so a check
+// found through the list can be used exactly like one fetched by ID.
+type CheckModel = checkattr.Model
 
 func NewChecksDataSource() datasource.DataSource {
 	return &ChecksDataSource{}
@@ -47,21 +40,33 @@ func (d *ChecksDataSource) Metadata(ctx context.Context, req datasource.Metadata
 
 func (d *ChecksDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Fetches all NodePing checks with optional filtering.",
+		Description: "Fetches all NodePing checks, optionally filtered by type.",
 		MarkdownDescription: `
-Fetches all NodePing checks with optional filtering.
+Fetches all NodePing checks, optionally filtered by type. Each entry carries the
+same attributes as the ` + "`nodeping_check`" + ` data source, including the
+check-type specific parameters.
+
+-> Credentials are not exposed. ` + "`password`" + ` and ` + "`snmpcom`" + ` are
+omitted deliberately; ` + "`sshkey`" + ` and ` + "`clientcert`" + ` return
+NodePing's identifier for a stored key, not the key material.
 
 ## Example Usage
 
 ` + "```hcl" + `
-data "nodeping_checks" "all" {}
-
-data "nodeping_checks" "http_only" {
+data "nodeping_checks" "http" {
   type = "HTTP"
 }
 
-output "check_ids" {
-  value = [for c in data.nodeping_checks.all.checks : c.id]
+output "targets" {
+  value = [for c in data.nodeping_checks.http.checks : c.target]
+}
+
+# Checks that follow redirects
+output "following" {
+  value = [
+    for c in data.nodeping_checks.http.checks : c.label
+    if c.follow == true
+  ]
 }
 ` + "```" + `
 `,
@@ -71,52 +76,10 @@ output "check_ids" {
 				Optional:    true,
 			},
 			"checks": schema.ListNestedAttribute{
-				Description: "List of checks.",
+				Description: "Matching checks, ordered by ID.",
 				Computed:    true,
 				NestedObject: schema.NestedAttributeObject{
-					Attributes: map[string]schema.Attribute{
-						"id": schema.StringAttribute{
-							Description: "The unique identifier of the check.",
-							Computed:    true,
-						},
-						"customer_id": schema.StringAttribute{
-							Description: "The customer ID (account ID) that owns this check.",
-							Computed:    true,
-						},
-						"type": schema.StringAttribute{
-							Description: "The type of check.",
-							Computed:    true,
-						},
-						"target": schema.StringAttribute{
-							Description: "The target URL, hostname, or IP address.",
-							Computed:    true,
-						},
-						"label": schema.StringAttribute{
-							Description: "The label for the check.",
-							Computed:    true,
-						},
-						"enabled": schema.BoolAttribute{
-							Description: "Whether the check is enabled.",
-							Computed:    true,
-						},
-						"interval": schema.Float64Attribute{
-							Description: "Check interval in minutes.",
-							Computed:    true,
-						},
-						"dep": schema.StringAttribute{
-							Description: "Check ID for notification dependency.",
-							Computed:    true,
-						},
-						"state": schema.Int64Attribute{
-							Description: "Current state (0 = failing, 1 = passing).",
-							Computed:    true,
-						},
-						"tags": schema.ListAttribute{
-							Description: "Tags for the check.",
-							Computed:    true,
-							ElementType: types.StringType,
-						},
-					},
+					Attributes: checkattr.Attributes(),
 				},
 			},
 		},
@@ -160,40 +123,30 @@ func (d *ChecksDataSource) Read(ctx context.Context, req datasource.ReadRequest,
 
 	typeFilter := config.Type.ValueString()
 
-	config.Checks = make([]CheckModel, 0, len(checks))
-	for _, check := range checks {
+	// The API returns a map, and Go randomises map iteration. Without sorting,
+	// the list order changes between reads and every plan shows a diff.
+	ids := make([]string, 0, len(checks))
+	for id := range checks {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	config.Checks = make([]CheckModel, 0, len(ids))
+	for _, id := range ids {
+		check := checks[id]
 		if typeFilter != "" && check.Type != typeFilter {
 			continue
 		}
 
-		checkModel := CheckModel{
-			ID:         types.StringValue(check.ID),
-			CustomerID: types.StringValue(check.CustomerID),
-			Type:       types.StringValue(check.Type),
-			Target:     types.StringValue(check.Parameters.Target),
-			Label:      types.StringValue(check.Label),
-			Enabled:    types.BoolValue(check.Enabled == "active"),
-			State:      types.Int64Value(int64(check.State)),
+		model := checkattr.FromAPI(ctx, &check, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if model.ID.IsNull() || model.ID.ValueString() == "" {
+			model.ID = types.StringValue(id)
 		}
 
-		if interval, err := check.Interval.Float64(); err == nil {
-			checkModel.Interval = types.Float64Value(interval)
-		}
-
-		if dep, ok := check.Dep.(string); ok && dep != "" {
-			checkModel.Dep = types.StringValue(dep)
-		} else {
-			checkModel.Dep = types.StringNull()
-		}
-
-		if check.Tags != nil {
-			tags, _ := types.ListValueFrom(ctx, types.StringType, check.Tags)
-			checkModel.Tags = tags
-		} else {
-			checkModel.Tags = types.ListNull(types.StringType)
-		}
-
-		config.Checks = append(config.Checks, checkModel)
+		config.Checks = append(config.Checks, model)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &config)...)
