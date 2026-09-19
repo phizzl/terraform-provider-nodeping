@@ -17,6 +17,15 @@ archives:
   - formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
 
+# Both the Terraform and the OpenTofu registry read the protocol version from
+# this manifest. Without it they assume protocol 5.0, while the plugin
+# framework actually serves 6.0 -- so a Terraform version that only speaks 5
+# would select this provider and then fail at runtime.
+release:
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
+
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
 
