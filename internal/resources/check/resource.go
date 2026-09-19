@@ -82,8 +82,10 @@ func (r *CheckResource) Create(ctx context.Context, req resource.CreateRequest, 
 	// Preserve the original target from plan if API normalized it (e.g., added trailing slash)
 	originalTarget := plan.Target
 	plannedTags := plan.Tags
+	plannedPassword := plan.Password
 
 	r.mapCheckToModel(ctx, check, &plan)
+	preservePassword(&plan, plannedPassword)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
@@ -133,8 +135,10 @@ func (r *CheckResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	// Preserve the original target from state if API normalized it
 	originalTarget := state.Target
+	statePassword := state.Password
 
 	r.mapCheckToModel(ctx, check, &state)
+	preservePassword(&state, statePassword)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(state.Target.ValueString()) {
@@ -181,8 +185,10 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plannedModified := plan.Modified
 	plannedContentString := plan.ContentString
 	plannedTags := plan.Tags
+	plannedPassword := plan.Password
 
 	r.mapCheckToModel(ctx, check, &plan)
+	preservePassword(&plan, plannedPassword)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
@@ -754,6 +760,8 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		model.Username = types.StringNull()
 	}
 
+	// The API never returns the password, so there is nothing to map. Callers
+	// must restore the configured value; see preservePassword.
 	model.Password = types.StringNull()
 
 	if len(check.Parameters.SendHeaders) > 0 {
@@ -816,6 +824,16 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 		}
 	} else {
 		model.Notifications = nil
+	}
+}
+
+// preservePassword restores a write-only credential after mapCheckToModel.
+// NodePing does not echo the password back, so mapping the response would
+// replace the configured value with null and fail the apply with
+// "inconsistent values for sensitive attribute".
+func preservePassword(model *CheckResourceModel, configured types.String) {
+	if !configured.IsNull() && !configured.IsUnknown() {
+		model.Password = configured
 	}
 }
 

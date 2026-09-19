@@ -555,3 +555,41 @@ data "nodeping_contactgroups" "all" {
 		},
 	})
 }
+
+// Regression test: a check with a password used to fail every apply with
+// ".password: inconsistent values for sensitive attribute". NodePing does not
+// echo credentials back, so mapping the response nulled the configured value.
+// Broken since the initial commit; any check type using password auth
+// (MYSQL, PGSQL, IMAP4, POP3, SMTP, FTP, SSH, HTTPADV) was affected.
+func TestAccCheckResource_passwordSurvivesApply(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	config := providerConfig(mock.URL()) + `
+resource "nodeping_check" "authed" {
+  type     = "MYSQL"
+  target   = "db.example.com"
+  label    = "acc-password"
+  port     = 3306
+  username = "monitor"
+  password = "s3cret"
+  database = "app"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("nodeping_check.authed", "password", "s3cret"),
+					resource.TestCheckResourceAttr("nodeping_check.authed", "username", "monitor"),
+					resource.TestCheckResourceAttr("nodeping_check.authed", "database", "app"),
+				),
+			},
+			// And it must not drift on the next plan either.
+			{Config: config, PlanOnly: true},
+		},
+	})
+}
