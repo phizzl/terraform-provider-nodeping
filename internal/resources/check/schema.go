@@ -420,8 +420,9 @@ terraform import nodeping_check.example 201205050153W2Q4C-0J2HSIRF
 				},
 			},
 			"snmpcom": schema.StringAttribute{
-				Description: "SNMP community string.",
+				Description: "SNMP community string. Treated as a credential: it is redacted in plan output and is not exposed by the check data sources.",
 				Optional:    true,
+				Sensitive:   true,
 			},
 			"verifyvolume": schema.BoolAttribute{
 				Description: "Enable the volume detection feature (AUDIO check only).",

@@ -693,3 +693,53 @@ resource "nodeping_check" "authed" {
 		},
 	})
 }
+
+// The notifications block is readable through the data sources too, so a
+// config can discover who a check currently notifies.
+func TestAccCheckDataSource_exposesNotifications(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: providerConfig(mock.URL()) + `
+resource "nodeping_contact" "notify" {
+  name = "acc-ds-notify"
+
+  address {
+    type    = "email"
+    address = "notify@example.com"
+  }
+}
+
+resource "nodeping_check" "notified" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-ds-notifications"
+
+  notifications {
+    contact_id = nodeping_contact.notify.address[0].id
+    delay      = 5
+    schedule   = "Days"
+  }
+}
+
+data "nodeping_check" "notified" {
+  id = nodeping_check.notified.id
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("data.nodeping_check.notified", "notifications.#", "1"),
+					resource.TestCheckResourceAttr("data.nodeping_check.notified", "notifications.0.delay", "5"),
+					resource.TestCheckResourceAttr("data.nodeping_check.notified", "notifications.0.schedule", "Days"),
+					resource.TestCheckResourceAttrPair(
+						"data.nodeping_check.notified", "notifications.0.contact_id",
+						"nodeping_contact.notify", "address.0.id",
+					),
+				),
+			},
+		},
+	})
+}

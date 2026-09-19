@@ -12,6 +12,7 @@ package checkattr
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -88,6 +89,16 @@ type Model struct {
 	// AUDIO
 	VerifyVolume types.Bool  `tfsdk:"verifyvolume"`
 	VolumeMin    types.Int64 `tfsdk:"volumemin"`
+
+	Notifications []NotificationModel `tfsdk:"notifications"`
+}
+
+// NotificationModel mirrors the notifications block on the resource: who gets
+// told when the check changes state.
+type NotificationModel struct {
+	ContactID types.String `tfsdk:"contact_id"`
+	Delay     types.Int64  `tfsdk:"delay"`
+	Schedule  types.String `tfsdk:"schedule"`
 }
 
 // Attributes returns every attribute as Computed. The singular data source
@@ -167,6 +178,18 @@ func Attributes() map[string]schema.Attribute {
 
 		"verifyvolume": b("Whether volume detection is enabled. AUDIO checks only."),
 		"volumemin":    i64("Minimum acceptable volume in dB. AUDIO checks only."),
+
+		"notifications": schema.ListNestedAttribute{
+			Description: "Who is notified when the check changes state, ordered as the API returns them.",
+			Computed:    true,
+			NestedObject: schema.NestedAttributeObject{
+				Attributes: map[string]schema.Attribute{
+					"contact_id": str("ID of the notified contact or contact group."),
+					"delay":      i64("Minutes to wait before notifying."),
+					"schedule":   str("Notification schedule the contact is notified on."),
+				},
+			},
+		},
 	}
 }
 
@@ -357,6 +380,65 @@ func FromAPI(ctx context.Context, check *client.Check, diags *diag.Diagnostics) 
 
 	m.Tags = stringList(ctx, check.Tags, diags)
 	m.RunLocations = RunLocations(ctx, check.RunLocations, diags)
+	m.Notifications = notifications(check.Notifications)
 
 	return m
+}
+
+// notifications flattens the API shape, which is a list of single-entry maps
+// keyed by contact ID: [{"CONTACT-1": {"delay": 0, "schedule": "All"}}].
+//
+// The outer list order is the API's and is preserved. The inner map is sorted
+// by contact ID, because Go randomises map iteration and an entry with more
+// than one key would otherwise reorder between reads and show a phantom diff.
+// Duplicates are dropped, matching how the resource reads the same field.
+func notifications(raw []map[string]interface{}) []NotificationModel {
+	if len(raw) == 0 {
+		return nil
+	}
+
+	out := make([]NotificationModel, 0, len(raw))
+	seen := make(map[string]bool)
+
+	for _, entry := range raw {
+		contactIDs := make([]string, 0, len(entry))
+		for contactID := range entry {
+			contactIDs = append(contactIDs, contactID)
+		}
+		sort.Strings(contactIDs)
+
+		for _, contactID := range contactIDs {
+			cfg, ok := entry[contactID].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			delay := OptionalInt64(cfg["delay"])
+			if delay.IsNull() {
+				delay = types.Int64Value(0)
+			}
+
+			schedule := "All"
+			if s, ok := cfg["schedule"].(string); ok && s != "" {
+				schedule = s
+			}
+
+			key := fmt.Sprintf("%s:%d:%s", contactID, delay.ValueInt64(), schedule)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			out = append(out, NotificationModel{
+				ContactID: types.StringValue(contactID),
+				Delay:     delay,
+				Schedule:  types.StringValue(schedule),
+			})
+		}
+	}
+
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

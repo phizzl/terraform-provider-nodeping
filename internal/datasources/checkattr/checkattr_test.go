@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 
 	"github.com/nodeping/terraform-provider-nodeping/internal/client"
 )
@@ -318,5 +319,111 @@ func TestAttributesAreDocumentedAndComputed(t *testing.T) {
 		if !attr.IsComputed() {
 			t.Errorf("attribute %q must be Computed", name)
 		}
+	}
+}
+
+func TestNotifications(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   []map[string]interface{}
+		want []NotificationModel
+	}{
+		{name: "nil is nil", in: nil, want: nil},
+		{name: "empty is nil", in: []map[string]interface{}{}, want: nil},
+		{
+			name: "single entry",
+			in: []map[string]interface{}{
+				{"CONTACT-1": map[string]interface{}{"delay": float64(0), "schedule": "All"}},
+			},
+			want: []NotificationModel{
+				{ContactID: types.StringValue("CONTACT-1"), Delay: types.Int64Value(0), Schedule: types.StringValue("All")},
+			},
+		},
+		{
+			// The API's outer ordering is meaningful and must survive.
+			name: "outer order is preserved",
+			in: []map[string]interface{}{
+				{"ZZZ": map[string]interface{}{"delay": float64(5), "schedule": "Days"}},
+				{"AAA": map[string]interface{}{"delay": float64(0), "schedule": "All"}},
+			},
+			want: []NotificationModel{
+				{ContactID: types.StringValue("ZZZ"), Delay: types.Int64Value(5), Schedule: types.StringValue("Days")},
+				{ContactID: types.StringValue("AAA"), Delay: types.Int64Value(0), Schedule: types.StringValue("All")},
+			},
+		},
+		{
+			// Several keys in one entry would otherwise reorder between reads,
+			// because Go randomises map iteration.
+			name: "multiple keys in one entry are sorted",
+			in: []map[string]interface{}{
+				{
+					"BBB": map[string]interface{}{"delay": float64(1), "schedule": "All"},
+					"AAA": map[string]interface{}{"delay": float64(2), "schedule": "All"},
+				},
+			},
+			want: []NotificationModel{
+				{ContactID: types.StringValue("AAA"), Delay: types.Int64Value(2), Schedule: types.StringValue("All")},
+				{ContactID: types.StringValue("BBB"), Delay: types.Int64Value(1), Schedule: types.StringValue("All")},
+			},
+		},
+		{
+			name: "duplicates are dropped",
+			in: []map[string]interface{}{
+				{"CONTACT-1": map[string]interface{}{"delay": float64(0), "schedule": "All"}},
+				{"CONTACT-1": map[string]interface{}{"delay": float64(0), "schedule": "All"}},
+			},
+			want: []NotificationModel{
+				{ContactID: types.StringValue("CONTACT-1"), Delay: types.Int64Value(0), Schedule: types.StringValue("All")},
+			},
+		},
+		{
+			name: "missing delay and schedule fall back to 0 and All",
+			in: []map[string]interface{}{
+				{"CONTACT-1": map[string]interface{}{}},
+			},
+			want: []NotificationModel{
+				{ContactID: types.StringValue("CONTACT-1"), Delay: types.Int64Value(0), Schedule: types.StringValue("All")},
+			},
+		},
+		{
+			name: "a delay sent as a string still parses",
+			in: []map[string]interface{}{
+				{"CONTACT-1": map[string]interface{}{"delay": "15", "schedule": "Nights"}},
+			},
+			want: []NotificationModel{
+				{ContactID: types.StringValue("CONTACT-1"), Delay: types.Int64Value(15), Schedule: types.StringValue("Nights")},
+			},
+		},
+		{
+			name: "entries that are not objects are skipped",
+			in: []map[string]interface{}{
+				{"CONTACT-1": "not-an-object"},
+			},
+			want: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := notifications(tt.in)
+			if len(got) != len(tt.want) {
+				t.Fatalf("got %d entries, want %d: %#v", len(got), len(tt.want), got)
+			}
+			for i := range tt.want {
+				if !got[i].ContactID.Equal(tt.want[i].ContactID) {
+					t.Errorf("index %d: ContactID = %v, want %v", i, got[i].ContactID, tt.want[i].ContactID)
+				}
+				if !got[i].Delay.Equal(tt.want[i].Delay) {
+					t.Errorf("index %d: Delay = %v, want %v", i, got[i].Delay, tt.want[i].Delay)
+				}
+				if !got[i].Schedule.Equal(tt.want[i].Schedule) {
+					t.Errorf("index %d: Schedule = %v, want %v", i, got[i].Schedule, tt.want[i].Schedule)
+				}
+			}
+		})
 	}
 }

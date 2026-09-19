@@ -87,6 +87,14 @@ output "following_redirects" {
 
 - `verifyvolume`, `volumemin`
 
+### Notifications
+
+- `notifications` - Who is notified when the check changes state, in the order
+  the API returns them. Each entry contains:
+  - `contact_id` - ID of the notified contact or contact group.
+  - `delay` - Minutes to wait before notifying.
+  - `schedule` - Notification schedule the contact is notified on.
+
 ## Credentials
 
 `password` and `snmpcom` are **not** exposed. A data source exists to be read,
