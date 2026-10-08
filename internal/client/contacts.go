@@ -45,7 +45,7 @@ func (c *Client) CreateContact(ctx context.Context, req ContactCreateRequest) (*
 	// create may have added.
 	c.contactList.created()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create contact: %w", err)
+		return nil, createError("contact", req.Name, err)
 	}
 	return &result, nil
 }
@@ -56,6 +56,8 @@ func (c *Client) UpdateContact(ctx context.Context, id string, req ContactUpdate
 		method: http.MethodPut,
 		path:   "/contacts/" + url.PathEscape(id),
 		body:   req,
+		// New addresses are added, so the update is not repeatable.
+		addsSomething: len(req.NewAddresses) > 0,
 	}, &result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update contact: %w", err)

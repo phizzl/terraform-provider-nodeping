@@ -45,7 +45,7 @@ func (c *Client) CreateContactGroup(ctx context.Context, req ContactGroupCreateR
 	// create may have added.
 	c.contactGroupList.created()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create contact group: %w", err)
+		return nil, createError("contact group", req.Name, err)
 	}
 	return &result, nil
 }
