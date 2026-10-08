@@ -25,11 +25,11 @@ func (c *Client) GetContact(ctx context.Context, id string) (*Contact, error) {
 		method: http.MethodGet,
 		path:   "/contacts/" + url.PathEscape(id),
 	}, &result)
+	if err == nil && result.ID == "" {
+		err = errNoID
+	}
 	if err != nil {
-		if apiErr, ok := err.(*APIError); ok && apiErr.IsNotFound() {
-			return nil, &NotFoundError{ResourceType: "contact", ResourceID: id}
-		}
-		return nil, fmt.Errorf("failed to get contact: %w", err)
+		return nil, confirmGone(ctx, c.ListContacts, "contact", id, fmt.Errorf("failed to get contact: %w", err))
 	}
 	return &result, nil
 }
@@ -67,7 +67,7 @@ func (c *Client) DeleteContact(ctx context.Context, id string) error {
 		path:   "/contacts/" + url.PathEscape(id),
 	}, &result)
 	if err != nil {
-		return fmt.Errorf("failed to delete contact: %w", err)
+		return confirmGone(ctx, c.ListContacts, "contact", id, fmt.Errorf("failed to delete contact: %w", err))
 	}
 	if !result.OK {
 		return fmt.Errorf("delete contact returned ok=false")

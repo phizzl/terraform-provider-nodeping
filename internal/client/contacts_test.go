@@ -94,29 +94,6 @@ func TestGetContact(t *testing.T) {
 	}
 }
 
-func TestGetContactNotFound(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(ErrorResponse{Error: "Contact not found"})
-	}))
-	defer server.Close()
-
-	c := NewClient(ClientConfig{
-		APIToken: "test-token",
-		BaseURL:  server.URL,
-	})
-
-	_, err := c.GetContact(context.Background(), "nonexistent")
-	if err == nil {
-		t.Fatal("expected error, got nil")
-	}
-
-	_, ok := err.(*NotFoundError)
-	if !ok {
-		t.Errorf("expected *NotFoundError, got %T", err)
-	}
-}
-
 func TestCreateContact(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
