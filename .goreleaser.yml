@@ -26,8 +26,15 @@ release:
     - glob: terraform-registry-manifest.json
       name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
 
+# The manifest has to be listed here as well as under `release`. The registry
+# refuses a release whose assets are not all covered by SHA256SUMS -- it
+# reports "missing SHA256 checksum for ..._manifest.json" and never ingests
+# the version.
 checksum:
   name_template: "{{ .ProjectName }}_{{ .Version }}_SHA256SUMS"
+  extra_files:
+    - glob: terraform-registry-manifest.json
+      name_template: "{{ .ProjectName }}_{{ .Version }}_manifest.json"
 
 signs:
   - artifacts: checksum
