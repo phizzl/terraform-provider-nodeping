@@ -97,6 +97,11 @@ provider "nodeping" {
   max_retries    = 3   # Maximum retry attempts
   retry_wait_min = 1   # Minimum wait between retries (seconds)
   retry_wait_max = 30  # Maximum wait between retries (seconds)
+
+  # Optional: tags applied to every check, merged with each check's own tags.
+  # The merged result is exposed as the check's tags_all attribute; tags keeps
+  # whatever the configuration itself set.
+  default_tags = ["managed-by-terraform"]
 }
 ```
 
@@ -277,7 +282,8 @@ Manages a NodePing monitoring check.
 | `sens` | int | No | Rechecks before status change |
 | `dep` | string | No | Check ID for notification dependency (suppresses notifications if dependent check is failing) |
 | `runlocations` | list | No | Probe locations |
-| `tags` | list | No | Tags for grouping |
+| `tags` | list | No | Tags for grouping, as written in the configuration |
+| `tags_all` | list | read-only | Every tag on the check: `tags` merged with the provider's `default_tags` |
 
 ### nodeping_contactgroup
 
