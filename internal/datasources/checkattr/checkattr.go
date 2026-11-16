@@ -263,6 +263,22 @@ func OptionalWarningDays(v interface{}) types.Int64 {
 	return days
 }
 
+// ClearedDescription is the description the nodeping_check resource writes
+// to clear one. NodePing ignores a description of "", null, false or 0, so a
+// description can only be overwritten, and a single space is the least of
+// it. It reads back as no description.
+const ClearedDescription = " "
+
+// OptionalDescription maps a description like OptionalString, except that
+// ClearedDescription is null too, so the resource, both data sources and an
+// import agree that a cleared check has no description.
+func OptionalDescription(s string) types.String {
+	if s == ClearedDescription {
+		return types.StringNull()
+	}
+	return OptionalString(s)
+}
+
 // OptionalString maps the API's empty string to null, matching how an unset
 // attribute looks in a configuration.
 func OptionalString(s string) types.String {
@@ -338,7 +354,7 @@ func FromAPI(ctx context.Context, check *client.Check, diags *diag.Diagnostics) 
 		State:       types.Int64Value(int64(check.State)),
 		Created:     types.Int64Value(check.Created),
 		Modified:    types.Int64Value(check.Modified),
-		Description: OptionalString(check.Description),
+		Description: OptionalDescription(check.Description),
 
 		HomeLoc: stringFromInterface(check.HomeLoc),
 

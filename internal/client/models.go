@@ -179,6 +179,9 @@ type RedisHost struct {
 	Password string `json:"password,omitempty"`
 }
 
+// ContentString, Method, PostData and ServerName are pointers, and the
+// header maps hold pointers, so an update can send "" and null: the values
+// NodePing needs to clear them. nil still means "leave out".
 type CheckCreateRequest struct {
 	Type           string                   `json:"type"`
 	Target         string                   `json:"target,omitempty"`
@@ -196,16 +199,16 @@ type CheckCreateRequest struct {
 	Mute           interface{}              `json:"mute,omitempty"`
 	Description    string                   `json:"description,omitempty"`
 	Tags           []string                 `json:"tags,omitempty"`
-	ContentString  string                   `json:"contentstring,omitempty"`
+	ContentString  *string                  `json:"contentstring,omitempty"`
 	Regex          interface{}              `json:"regex,omitempty"`
 	Invert         interface{}              `json:"invert,omitempty"`
 	Follow         interface{}              `json:"follow,omitempty"`
-	Method         string                   `json:"method,omitempty"`
+	Method         *string                  `json:"method,omitempty"`
 	StatusCode     interface{}              `json:"statuscode,omitempty"`
-	SendHeaders    map[string]string        `json:"sendheaders,omitempty"`
-	ReceiveHeaders map[string]string        `json:"receiveheaders,omitempty"`
+	SendHeaders    map[string]*string       `json:"sendheaders,omitempty"`
+	ReceiveHeaders map[string]*string       `json:"receiveheaders,omitempty"`
 	Data           interface{}              `json:"data,omitempty"`
-	PostData       string                   `json:"postdata,omitempty"`
+	PostData       *string                  `json:"postdata,omitempty"`
 	Port           interface{}              `json:"port,omitempty"`
 	Username       string                   `json:"username,omitempty"`
 	Password       string                   `json:"password,omitempty"`
@@ -218,7 +221,7 @@ type CheckCreateRequest struct {
 	DNSRD          interface{}              `json:"dnsrd,omitempty"`
 	Transport      string                   `json:"transport,omitempty"`
 	WarningDays    interface{}              `json:"warningdays,omitempty"`
-	ServerName     string                   `json:"servername,omitempty"`
+	ServerName     *string                  `json:"servername,omitempty"`
 	Email          string                   `json:"email,omitempty"`
 	Database       string                   `json:"database,omitempty"`
 	Query          string                   `json:"query,omitempty"`

@@ -194,6 +194,90 @@ func applyEnableState(check map[string]interface{}, requested interface{}) {
 	check["queue"] = false
 }
 
+// mergeCheckUpdate applies an update the way NodePing does, as measured
+// against the real API by the stefang-kahoot fork on 2026-10-08. NodePing
+// merges an update into the stored check and keeps whatever the update leaves
+// out -- it does not replace it. An earlier version of this mock replaced the
+// parameters wholesale, which made a removed attribute vanish on its own and
+// hid the provider never clearing it.
+//
+// The quirks it reproduces:
+//
+//   - parameters are merged key by key; a key not sent keeps its value.
+//   - sendheaders and receiveheaders merge per header name; only a header
+//     sent as null is deleted, so a smaller map or {} keeps every header.
+//   - description ignores "", null, false and 0; it can only be overwritten.
+//   - public on an update ignores the boolean false and 0; only the strings
+//     "false" and "0" switch it off.
+//   - notifications and tags are replaced by a list, and kept on null.
+func mergeCheckUpdate(check, req map[string]interface{}) {
+	for _, k := range checkTopLevelFields {
+		v, ok := req[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "description":
+			if v == nil || v == "" || v == false || v == float64(0) {
+				continue
+			}
+		case "public":
+			switch v {
+			case false, float64(0), nil:
+				continue
+			case "false", "0":
+				v = false
+			case "true", "1":
+				v = true
+			}
+		case "notifications", "tags":
+			if v == nil {
+				continue
+			}
+		}
+		check[k] = v
+	}
+
+	params, _ := check["parameters"].(map[string]interface{})
+	if params == nil {
+		params = make(map[string]interface{})
+	}
+	for k, v := range checkParametersFrom(req) {
+		if k == "sendheaders" || k == "receiveheaders" {
+			merged := mergeHeaders(params[k], v)
+			if len(merged) == 0 {
+				delete(params, k)
+			} else {
+				params[k] = merged
+			}
+			continue
+		}
+		params[k] = v
+	}
+	check["parameters"] = params
+}
+
+// mergeHeaders merges sent headers into the stored ones per name. A header
+// sent as null is deleted; any other header is set.
+func mergeHeaders(stored, sent interface{}) map[string]interface{} {
+	out := make(map[string]interface{})
+	if m, ok := stored.(map[string]interface{}); ok {
+		for name, value := range m {
+			out[name] = value
+		}
+	}
+	if m, ok := sent.(map[string]interface{}); ok {
+		for name, value := range m {
+			if value == nil {
+				delete(out, name)
+				continue
+			}
+			out[name] = value
+		}
+	}
+	return out
+}
+
 func (m *MockNodePingServer) handleChecks(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -268,25 +352,10 @@ func (m *MockNodePingServer) handleCheck(w http.ResponseWriter, r *http.Request)
 			return
 		}
 
-		if label, ok := req["label"]; ok {
-			check["label"] = label
-		}
+		mergeCheckUpdate(check, req)
 		if enabled, ok := req["enabled"]; ok {
 			applyEnableState(check, enabled)
 		}
-		if interval, ok := req["interval"]; ok {
-			check["interval"] = interval
-		}
-		for _, k := range checkTopLevelFields {
-			if v, ok := req[k]; ok {
-				check[k] = v
-			}
-		}
-		// The real API replaces the stored parameters with what the update
-		// sends, so an attribute removed from the config disappears from the
-		// response too. Mirroring that is what makes update round-trips
-		// meaningful to test.
-		check["parameters"] = checkParametersFrom(req)
 
 		m.checks[id] = check
 		w.Header().Set("Content-Type", "application/json")

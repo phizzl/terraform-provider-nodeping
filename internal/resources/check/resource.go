@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-log/tflog"
 
 	"github.com/nodeping/terraform-provider-nodeping/internal/client"
+	"github.com/nodeping/terraform-provider-nodeping/internal/datasources/checkattr"
 )
 
 var (
@@ -84,9 +85,11 @@ func (r *CheckResource) Create(ctx context.Context, req resource.CreateRequest, 
 	originalTarget := plan.Target
 	plannedTagsAll := plan.TagsAll
 	plannedPassword := plan.Password
+	expected := plan
 
 	r.mapCheckToModel(ctx, check, &plan)
 	preservePassword(&plan, plannedPassword)
+	keepClearedBooleans(&plan, &expected)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
@@ -137,9 +140,11 @@ func (r *CheckResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	// Preserve the original target from state if API normalized it
 	originalTarget := state.Target
 	statePassword := state.Password
+	expected := state
 
 	r.mapCheckToModel(ctx, check, &state)
 	preservePassword(&state, statePassword)
+	keepClearedBooleans(&state, &expected)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(state.Target.ValueString()) {
@@ -166,6 +171,13 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	createReq := r.buildCreateRequest(ctx, &plan, &resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
 		return
+	}
+
+	// NodePing keeps whatever an update leaves out, so send the value that
+	// clears each attribute the plan dropped -- see clearRemoved.
+	clearRemoved(&createReq, &plan, &state)
+	if public := publicForUpdate(&plan); public != nil {
+		createReq.Public = public
 	}
 
 	updateReq := client.CheckUpdateRequest{CheckCreateRequest: createReq}
@@ -202,9 +214,11 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	plannedContentString := plan.ContentString
 	plannedTagsAll := plan.TagsAll
 	plannedPassword := plan.Password
+	expected := plan
 
 	r.mapCheckToModel(ctx, check, &plan)
 	preservePassword(&plan, plannedPassword)
+	keepClearedBooleans(&plan, &expected)
 
 	// Restore original target if it's semantically equivalent (trailing slash difference)
 	if normalizeURL(originalTarget.ValueString()) == normalizeURL(plan.Target.ValueString()) {
@@ -495,7 +509,7 @@ func (r *CheckResource) buildCreateRequest(ctx context.Context, plan *CheckResou
 	}
 
 	if !plan.ContentString.IsNull() {
-		req.ContentString = plan.ContentString.ValueString()
+		req.ContentString = stringPtr(plan.ContentString.ValueString())
 	}
 
 	if !plan.Regex.IsNull() {
@@ -511,27 +525,23 @@ func (r *CheckResource) buildCreateRequest(ctx context.Context, plan *CheckResou
 	}
 
 	if !plan.Method.IsNull() {
-		req.Method = plan.Method.ValueString()
+		req.Method = stringPtr(plan.Method.ValueString())
 	}
 
 	if !plan.StatusCode.IsNull() {
 		req.StatusCode = int(plan.StatusCode.ValueInt64())
 	}
 
-	if !plan.SendHeaders.IsNull() {
-		headers := make(map[string]string)
-		diags.Append(plan.SendHeaders.ElementsAs(ctx, &headers, false)...)
-		req.SendHeaders = headers
+	if !plan.SendHeaders.IsNull() && !plan.SendHeaders.IsUnknown() {
+		req.SendHeaders = headersToAPI(ctx, plan.SendHeaders, diags)
 	}
 
-	if !plan.ReceiveHeaders.IsNull() {
-		headers := make(map[string]string)
-		diags.Append(plan.ReceiveHeaders.ElementsAs(ctx, &headers, false)...)
-		req.ReceiveHeaders = headers
+	if !plan.ReceiveHeaders.IsNull() && !plan.ReceiveHeaders.IsUnknown() {
+		req.ReceiveHeaders = headersToAPI(ctx, plan.ReceiveHeaders, diags)
 	}
 
 	if !plan.PostData.IsNull() {
-		req.PostData = plan.PostData.ValueString()
+		req.PostData = stringPtr(plan.PostData.ValueString())
 	}
 
 	if !plan.Port.IsNull() {
@@ -583,7 +593,7 @@ func (r *CheckResource) buildCreateRequest(ctx context.Context, plan *CheckResou
 	}
 
 	if !plan.ServerName.IsNull() {
-		req.ServerName = plan.ServerName.ValueString()
+		req.ServerName = stringPtr(plan.ServerName.ValueString())
 	}
 
 	if !plan.Email.IsNull() {
@@ -664,11 +674,7 @@ func (r *CheckResource) mapCheckToModel(ctx context.Context, check *client.Check
 	model.Created = types.Int64Value(check.Created)
 	model.Modified = types.Int64Value(check.Modified)
 
-	if check.Description != "" {
-		model.Description = types.StringValue(check.Description)
-	} else {
-		model.Description = types.StringNull()
-	}
+	model.Description = checkattr.OptionalDescription(check.Description)
 
 	// Only tags_all is refreshed from the API. tags is the configuration's own
 	// value: overwriting it with the API's list would fold default_tags into it

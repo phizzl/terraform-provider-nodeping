@@ -1017,3 +1017,212 @@ resource "nodeping_check" "c" {
 		},
 	})
 }
+
+// NodePing merges an update into the check and keeps whatever it leaves out,
+// so removing an attribute from the configuration has to clear it
+// explicitly. Each test sets attributes, removes them, and then plans again:
+// the refresh must not bring a removed value back.
+
+func TestAccCheckResource_clearsRemovedHTTPAttributes(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	full := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type          = "HTTPADV"
+  target        = "https://example.com"
+  label         = "acc-clear-http"
+  description   = "to be removed"
+  contentstring = "ok"
+  regex         = true
+  invert        = true
+  follow        = true
+  method        = "POST"
+  statuscode    = 201
+  postdata      = "body"
+
+  sendheaders = {
+    "x-keep" = "1"
+    "x-drop" = "2"
+  }
+  receiveheaders = {
+    "x-seen" = "1"
+  }
+}
+`
+	// One header of two removed: NodePing merges headers per name, so only a
+	// header sent as null is deleted.
+	oneHeader := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type          = "HTTPADV"
+  target        = "https://example.com"
+  label         = "acc-clear-http"
+  description   = "to be removed"
+  contentstring = "ok"
+  regex         = true
+  invert        = true
+  follow        = true
+  method        = "POST"
+  statuscode    = 201
+  postdata      = "body"
+
+  sendheaders = {
+    "x-keep" = "1"
+  }
+  receiveheaders = {
+    "x-seen" = "1"
+  }
+}
+`
+	bare := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type   = "HTTPADV"
+  target = "https://example.com"
+  label  = "acc-clear-http"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{Config: full},
+			{
+				Config: oneHeader,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("nodeping_check.c", "sendheaders.%", "1"),
+					resource.TestCheckResourceAttr("nodeping_check.c", "sendheaders.x-keep", "1"),
+				),
+			},
+			{Config: oneHeader, PlanOnly: true},
+			{
+				Config: bare,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "description"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "contentstring"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "regex"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "invert"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "follow"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "method"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "statuscode"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "sendheaders.%"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "receiveheaders.%"),
+				),
+			},
+			{Config: bare, PlanOnly: true},
+		},
+	})
+}
+
+func TestAccCheckResource_clearsRemovedSSLAttributes(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	full := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type        = "SSL"
+  target      = "https://example.com"
+  label       = "acc-clear-ssl"
+  warningdays = 30
+  servername  = "sni.example.com"
+}
+`
+	bare := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type   = "SSL"
+  target = "https://example.com"
+  label  = "acc-clear-ssl"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{Config: full},
+			{
+				Config: bare,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "warningdays"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "servername"),
+				),
+			},
+			{Config: bare, PlanOnly: true},
+		},
+	})
+}
+
+func TestAccCheckResource_clearsRemovedDependencyAndLocations(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	parent := `
+resource "nodeping_check" "parent" {
+  type   = "PING"
+  target = "203.0.113.1"
+  label  = "acc-clear-parent"
+}
+`
+	full := providerConfig(mock.URL()) + parent + `
+resource "nodeping_check" "c" {
+  type         = "HTTP"
+  target       = "https://example.com"
+  label        = "acc-clear-dep"
+  dep          = nodeping_check.parent.id
+  runlocations = ["nam"]
+}
+`
+	bare := providerConfig(mock.URL()) + parent + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-clear-dep"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{Config: full},
+			{
+				Config: bare,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "dep"),
+					resource.TestCheckNoResourceAttr("nodeping_check.c", "runlocations.#"),
+				),
+			},
+			{Config: bare, PlanOnly: true},
+		},
+	})
+}
+
+// On an update NodePing ignores public sent as the boolean false; only the
+// string "false" switches public reports off.
+func TestAccCheckResource_switchesPublicOff(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	on := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-public"
+  public = true
+}
+`
+	off := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-public"
+  public = false
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{Config: on, Check: resource.TestCheckResourceAttr("nodeping_check.c", "public", "true")},
+			{Config: off, Check: resource.TestCheckResourceAttr("nodeping_check.c", "public", "false")},
+			{Config: off, PlanOnly: true},
+		},
+	})
+}
