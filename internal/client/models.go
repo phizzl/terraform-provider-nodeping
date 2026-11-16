@@ -84,15 +84,21 @@ type ContactUpdateRequest struct {
 }
 
 type Check struct {
-	ID            string                   `json:"_id,omitempty"`
-	Rev           string                   `json:"_rev,omitempty"`
+	ID string `json:"_id,omitempty"`
+	// Rev, Status, Queue and UUID are bookkeeping fields the provider never
+	// reads. NodePing does not type them consistently: for an inactive check
+	// "queue" arrives as the boolean false instead of a string. A string field
+	// made json.Unmarshal fail on such a check, which broke every plan and
+	// every nodeping_checks read that touched one. Typed as interface{} they
+	// accept whatever the API sends, like FirstDown, Dep and HomeLoc below.
+	Rev           interface{}              `json:"_rev,omitempty"`
 	CustomerID    string                   `json:"customer_id,omitempty"`
 	Label         string                   `json:"label,omitempty"`
 	Type          string                   `json:"type,omitempty"`
 	Interval      json.Number              `json:"interval,omitempty"`
 	Enabled       string                   `json:"enable,omitempty"`
 	Public        bool                     `json:"public,omitempty"`
-	Status        string                   `json:"status,omitempty"`
+	Status        interface{}              `json:"status,omitempty"`
 	Modified      int64                    `json:"modified,omitempty"`
 	Created       int64                    `json:"created,omitempty"`
 	State         int                      `json:"state,omitempty"`
@@ -102,8 +108,8 @@ type Check struct {
 	Dep           interface{}              `json:"dep,omitempty"`
 	Mute          interface{}              `json:"mute,omitempty"`
 	Description   string                   `json:"description,omitempty"`
-	Queue         string                   `json:"queue,omitempty"`
-	UUID          string                   `json:"uuid,omitempty"`
+	Queue         interface{}              `json:"queue,omitempty"`
+	UUID          interface{}              `json:"uuid,omitempty"`
 	RunLocations  interface{}              `json:"runlocations,omitempty"`
 	HomeLoc       interface{}              `json:"homeloc,omitempty"`
 	AutoDiag      bool                     `json:"autodiag,omitempty"`

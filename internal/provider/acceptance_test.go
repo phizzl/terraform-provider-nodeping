@@ -832,3 +832,94 @@ resource "nodeping_check" "untagged" {
 		},
 	})
 }
+
+// Regression test for a bug reported against 0.4.1: reading a disabled check
+// failed with "cannot unmarshal bool into Go struct field Check.queue of type
+// string", because NodePing reports "queue": false for an inactive check.
+// Every plan that refreshed such a check failed.
+//
+// Covers both ways a check ends up inactive: created disabled, and disabled
+// by a later update. The PlanOnly steps force a refresh, which is where the
+// read failed.
+func TestAccCheckResource_inactiveCheckCanBeRead(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	active := providerConfig(mock.URL()) + `
+resource "nodeping_check" "toggled" {
+  type    = "HTTPADV"
+  target  = "https://example.com"
+  label   = "acc-inactive"
+  enabled = true
+
+  sendheaders = {
+    "x-test" = "1"
+  }
+}
+`
+	inactive := providerConfig(mock.URL()) + `
+resource "nodeping_check" "toggled" {
+  type    = "HTTPADV"
+  target  = "https://example.com"
+  label   = "acc-inactive"
+  enabled = false
+
+  sendheaders = {
+    "x-test" = "1"
+  }
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			// Created active.
+			{
+				Config: active,
+				Check:  resource.TestCheckResourceAttr("nodeping_check.toggled", "enabled", "true"),
+			},
+			// Disabled by an update.
+			{
+				Config: inactive,
+				Check:  resource.TestCheckResourceAttr("nodeping_check.toggled", "enabled", "false"),
+			},
+			// The refresh of the now inactive check is where 0.4.1 failed.
+			{Config: inactive, PlanOnly: true},
+		},
+	})
+}
+
+func TestAccCheckResource_createdInactive(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	config := providerConfig(mock.URL()) + `
+resource "nodeping_check" "off" {
+  type    = "HTTP"
+  target  = "https://example.com"
+  label   = "acc-created-inactive"
+  enabled = false
+}
+
+data "nodeping_checks" "all" {
+  depends_on = [nodeping_check.off]
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("nodeping_check.off", "enabled", "false"),
+					// The list endpoint decodes the same struct, so one inactive
+					// check used to break nodeping_checks for the whole account.
+					resource.TestCheckResourceAttr("data.nodeping_checks.all", "checks.#", "1"),
+					resource.TestCheckResourceAttr("data.nodeping_checks.all", "checks.0.enabled", "false"),
+				),
+			},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}

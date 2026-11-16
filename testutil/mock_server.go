@@ -170,6 +170,20 @@ func checkParametersFrom(req map[string]interface{}) map[string]interface{} {
 	return params
 }
 
+// applyEnableState mirrors how NodePing reports a check's enabled state. A
+// disabled check comes back as enable "inactive" with "queue": false -- a
+// boolean where an active check carries a string. Mocking that shape is what
+// lets the acceptance tests catch a client that only copes with strings.
+func applyEnableState(check map[string]interface{}, requested interface{}) {
+	if requested == "active" || requested == true || requested == "true" {
+		check["enable"] = "active"
+		check["queue"] = "mockqueue"
+		return
+	}
+	check["enable"] = "inactive"
+	check["queue"] = false
+}
+
 func (m *MockNodePingServer) handleChecks(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -192,7 +206,7 @@ func (m *MockNodePingServer) handleChecks(w http.ResponseWriter, r *http.Request
 			"customer_id": "MOCK-CUSTOMER",
 			"type":        req["type"],
 			"label":       req["label"],
-			"enable":      req["enabled"],
+			"enable":      nil,
 			"interval":    req["interval"],
 			"state":       1,
 			"created":     1609459200000,
@@ -204,6 +218,7 @@ func (m *MockNodePingServer) handleChecks(w http.ResponseWriter, r *http.Request
 				check[k] = v
 			}
 		}
+		applyEnableState(check, req["enabled"])
 
 		m.checks[id] = check
 		w.Header().Set("Content-Type", "application/json")
@@ -247,7 +262,7 @@ func (m *MockNodePingServer) handleCheck(w http.ResponseWriter, r *http.Request)
 			check["label"] = label
 		}
 		if enabled, ok := req["enabled"]; ok {
-			check["enable"] = enabled
+			applyEnableState(check, enabled)
 		}
 		if interval, ok := req["interval"]; ok {
 			check["interval"] = interval

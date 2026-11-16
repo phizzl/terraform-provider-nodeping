@@ -236,3 +236,75 @@ func TestDeleteCheck(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// inactiveCheckJSON is the shape NodePing returns for a disabled check. For an
+// active check "queue" is a string; for an inactive one it is the boolean
+// false. Reported against 0.4.1, where Check.Queue was a string and the
+// unmarshal failed, so every plan with an inactive check in it broke:
+//
+//	failed to unmarshal response: json: cannot unmarshal bool into Go
+//	struct field Check.queue of type string
+//
+// The raw JSON is written out by hand on purpose. Encoding a Check struct, as
+// the other tests do, can only ever produce the types the struct already has
+// and so could never reproduce this.
+const inactiveCheckJSON = `{
+  "_id": "201205050153W2Q4C-0J2HSIRF",
+  "customer_id": "201205050153W2Q4C",
+  "label": "inactive check",
+  "type": "HTTPADV",
+  "enable": "inactive",
+  "queue": false,
+  "status": false,
+  "uuid": false,
+  "_rev": false,
+  "state": 0,
+  "parameters": {
+    "target": "https://example.com",
+    "sendheaders": {"x-test": "1"}
+  }
+}`
+
+func TestGetCheckInactive(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(inactiveCheckJSON))
+	}))
+	defer server.Close()
+
+	c := NewClient(ClientConfig{APIToken: "test-token", BaseURL: server.URL})
+
+	check, err := c.GetCheck(context.Background(), "201205050153W2Q4C-0J2HSIRF")
+	if err != nil {
+		t.Fatalf("reading an inactive check must not fail: %v", err)
+	}
+	if check.Enabled != "inactive" {
+		t.Errorf("Enabled = %q, want %q", check.Enabled, "inactive")
+	}
+	if check.Parameters.Target != "https://example.com" {
+		t.Errorf("Target = %q, want the configured target", check.Parameters.Target)
+	}
+}
+
+// The list endpoint decodes the same struct, so one inactive check used to
+// break nodeping_checks for the whole account, not just the one check.
+func TestListChecksWithInactiveCheck(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{
+  "ACTIVE-1": {"_id": "ACTIVE-1", "type": "HTTP", "enable": "active", "queue": "bQeue1"},
+  "INACTIVE-1": ` + inactiveCheckJSON + `
+}`))
+	}))
+	defer server.Close()
+
+	c := NewClient(ClientConfig{APIToken: "test-token", BaseURL: server.URL})
+
+	checks, err := c.ListChecks(context.Background())
+	if err != nil {
+		t.Fatalf("listing checks that include an inactive one must not fail: %v", err)
+	}
+	if len(checks) != 2 {
+		t.Fatalf("expected 2 checks, got %d", len(checks))
+	}
+}
