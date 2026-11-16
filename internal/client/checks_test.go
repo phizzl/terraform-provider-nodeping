@@ -308,3 +308,26 @@ func TestListChecksWithInactiveCheck(t *testing.T) {
 		t.Fatalf("expected 2 checks, got %d", len(checks))
 	}
 }
+
+// NodePing answers an update with the check as it stood before the change was
+// fully applied: a check switched from disabled to enabled can still report
+// "queue": false in the PUT response. Decoding that response failed the same
+// way the read did, after NodePing had already stored the change -- so the
+// apply errored while the check was in fact updated, and the state was not.
+func TestUpdateCheckResponseWithInactiveQueue(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			t.Errorf("expected PUT, got %s", r.Method)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(inactiveCheckJSON))
+	}))
+	defer server.Close()
+
+	c := NewClient(ClientConfig{APIToken: "test-token", BaseURL: server.URL})
+
+	req := CheckUpdateRequest{CheckCreateRequest: CheckCreateRequest{Type: "HTTPADV", Enabled: "active"}}
+	if _, err := c.UpdateCheck(context.Background(), "201205050153W2Q4C-0J2HSIRF", req); err != nil {
+		t.Fatalf("an update answered with queue=false must not fail: %v", err)
+	}
+}
