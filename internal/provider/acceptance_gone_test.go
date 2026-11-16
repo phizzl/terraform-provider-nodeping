@@ -8,7 +8,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-testing/plancheck"
 	"github.com/hashicorp/terraform-plugin-testing/terraform"
 
-	"github.com/stefang-kahoot/terraform-provider-nodeping/testutil"
+	"github.com/nodeping/terraform-provider-nodeping/testutil"
 )
 
 // Something deleted in the NodePing web interface has to leave state, so that
