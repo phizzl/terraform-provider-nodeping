@@ -923,3 +923,97 @@ data "nodeping_checks" "all" {
 		},
 	})
 }
+
+// Regression test: removing a check's only notifications block left the
+// notification in place at NodePing and failed the apply with "Provider
+// produced inconsistent result after apply". An update omitted the empty list,
+// and NodePing keeps a check's notifications when the list is left out.
+func TestAccCheckResource_removeLastNotification(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	contact := `
+resource "nodeping_contact" "n" {
+  name = "acc-remove-notification"
+
+  address {
+    type    = "email"
+    address = "n@example.com"
+  }
+}
+`
+	with := providerConfig(mock.URL()) + contact + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-remove-notification"
+
+  notifications {
+    contact_id = nodeping_contact.n.address[0].id
+    delay      = 0
+    schedule   = "All"
+  }
+}
+`
+	without := providerConfig(mock.URL()) + contact + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-remove-notification"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: with,
+				Check:  resource.TestCheckResourceAttr("nodeping_check.c", "notifications.#", "1"),
+			},
+			{
+				Config: without,
+				Check:  resource.TestCheckResourceAttr("nodeping_check.c", "notifications.#", "0"),
+			},
+			// The refresh must not find the notification still in place.
+			{Config: without, PlanOnly: true},
+		},
+	})
+}
+
+// Same omission for tags: removing a check's last tag never reached NodePing,
+// so the next refresh read the tag back and showed a permanent diff.
+func TestAccCheckResource_removeLastTag(t *testing.T) {
+	mock := testutil.NewMockNodePingServer()
+	t.Cleanup(mock.Close)
+
+	tagged := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-remove-tag"
+  tags   = ["only"]
+}
+`
+	untagged := providerConfig(mock.URL()) + `
+resource "nodeping_check" "c" {
+  type   = "HTTP"
+  target = "https://example.com"
+  label  = "acc-remove-tag"
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: protoV6ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: tagged,
+				Check:  resource.TestCheckResourceAttr("nodeping_check.c", "tags_all.#", "1"),
+			},
+			{
+				Config: untagged,
+				Check:  resource.TestCheckResourceAttr("nodeping_check.c", "tags_all.#", "0"),
+			},
+			{Config: untagged, PlanOnly: true},
+		},
+	})
+}

@@ -170,6 +170,21 @@ func (r *CheckResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	updateReq := client.CheckUpdateRequest{CheckCreateRequest: createReq}
 
+	// An update has to send the full lists, [] included, or NodePing keeps the
+	// old ones -- see CheckUpdateRequest.
+	updateReq.Notifications = createReq.Notifications
+	if updateReq.Notifications == nil {
+		updateReq.Notifications = []map[string]interface{}{}
+	}
+	// tags_all is only unknown while tags is, and then the current tags must
+	// survive: a nil Tags is sent as null, which NodePing leaves alone.
+	if !plan.TagsAll.IsUnknown() {
+		updateReq.Tags = createReq.Tags
+		if updateReq.Tags == nil {
+			updateReq.Tags = []string{}
+		}
+	}
+
 	check, err := r.client.UpdateCheck(ctx, state.ID.ValueString(), updateReq)
 	if err != nil {
 		resp.Diagnostics.AddError(

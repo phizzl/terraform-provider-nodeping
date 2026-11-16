@@ -244,6 +244,19 @@ type CheckCreateRequest struct {
 
 type CheckUpdateRequest struct {
 	CheckCreateRequest
+
+	// NodePing replaces a check's notifications and tags with the lists an
+	// update sends, but keeps them when the update leaves a list out or sends
+	// null. The embedded create request omits empty lists, so removing the
+	// last notification or the last tag never reached NodePing: the apply
+	// failed with an inconsistent result and NodePing kept notifying.
+	//
+	// These fields shadow the embedded ones (encoding/json picks the
+	// shallower field) and are not omitempty. Set them to an empty slice to
+	// clear a list; leaving one nil sends null, which NodePing treats as
+	// "keep what is there".
+	Notifications []map[string]interface{} `json:"notifications"`
+	Tags          []string                 `json:"tags"`
 }
 
 type Notification struct {

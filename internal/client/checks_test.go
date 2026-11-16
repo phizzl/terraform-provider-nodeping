@@ -331,3 +331,55 @@ func TestUpdateCheckResponseWithInactiveQueue(t *testing.T) {
 		t.Fatalf("an update answered with queue=false must not fail: %v", err)
 	}
 }
+
+// An update must send empty lists as [] rather than dropping them, and must
+// not send the embedded create request's copy of the field as well.
+func TestCheckUpdateRequestSendsEmptyLists(t *testing.T) {
+	t.Parallel()
+
+	req := CheckUpdateRequest{
+		CheckCreateRequest: CheckCreateRequest{Type: "HTTP"},
+		Notifications:      []map[string]interface{}{},
+		Tags:               []string{},
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	for _, key := range []string{"notifications", "tags"} {
+		raw, ok := decoded[key]
+		if !ok {
+			t.Errorf("%q is missing from the update body: %s", key, body)
+			continue
+		}
+		if string(raw) != "[]" {
+			t.Errorf("%q = %s, want []", key, raw)
+		}
+	}
+}
+
+// A nil list is sent as null, which NodePing treats as "keep what is there".
+// Update relies on that to leave tags alone while tags_all is unknown.
+func TestCheckUpdateRequestNilListIsNull(t *testing.T) {
+	t.Parallel()
+
+	body, err := json.Marshal(CheckUpdateRequest{CheckCreateRequest: CheckCreateRequest{Type: "HTTP"}})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if string(decoded["tags"]) != "null" {
+		t.Errorf("tags = %s, want null", decoded["tags"])
+	}
+}
